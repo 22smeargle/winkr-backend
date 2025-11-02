@@ -1,0 +1,1197 @@
+openapi: 3.0.3
+info:
+  title: Winkr Verification API
+  description: |
+    API for user verification with AI comparison and document processing in the Winkr dating application.
+    
+    This API provides comprehensive verification functionality including:
+    - AI-powered selfie verification with face detection
+    - Document verification with OCR processing
+    - Liveness detection to prevent spoofing
+    - Admin review and approval workflow
+    - Multi-level verification system
+    - Secure upload with presigned URLs
+    - Real-time verification status tracking
+    
+    ## Security Features
+    - JWT-based authentication for all endpoints
+    - AI-powered face detection and liveness verification
+    - Document OCR and validation
+    - Anti-spoofing and fraud detection
+    - Secure file upload with encryption
+    - Rate limiting to prevent abuse
+    - Admin audit trails and review workflows
+    - GDPR-compliant data handling
+    - Automatic content moderation
+    
+    ## Rate Limiting
+    - Selfie verification requests: 5 requests per hour per authenticated user
+    - Document verification requests: 3 requests per hour per authenticated user
+    - Status checks: 30 requests per minute per authenticated user
+    - Admin verification listing: 20 requests per minute per admin user
+    - Admin verification actions: 10 requests per minute per admin user
+  version: 1.0.0
+  contact:
+    name: Winkr API Team
+    email: api@winkr.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.winkr.com/v1
+    description: Production server
+  - url: https://staging-api.winkr.com/v1
+    description: Staging server
+  - url: http://localhost:8080/v1
+    description: Development server
+
+paths:
+  /verify/selfie/request:
+    post:
+      tags:
+        - Verification
+      summary: Request selfie verification
+      description: |
+        Initiates a selfie verification process and returns a secure upload URL.
+        
+        ## Selfie Verification Request Process
+        1. Client provides valid JWT token
+        2. System validates token and checks user verification status
+        3. Unique verification ID is generated
+        4. Secure presigned upload URL is created
+        5. Upload URL expires after 15 minutes
+        6. Verification request is logged for audit
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Rate limiting: 5 requests per hour per authenticated user
+        - Secure presigned URL generation
+        - Upload URL expiration (15 minutes)
+        - Verification status validation
+        - Audit logging for compliance
+        - Anti-spam protection
+        - Request throttling
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestSelfieVerificationDTO'
+      responses:
+        '200':
+          description: Selfie verification request successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfieVerificationRequestResponseDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /verify/selfie/submit:
+    post:
+      tags:
+        - Verification
+      summary: Submit selfie verification
+      description: |
+        Submits a selfie photo for AI-powered verification.
+        
+        ## Selfie Verification Process
+        1. Client uploads selfie using secure presigned URL
+        2. System validates file format and size
+        3. AI performs face detection and analysis
+        4. Liveness detection prevents photo spoofing
+        5. Face comparison with profile photos
+        6. Confidence score is calculated
+        7. Results are stored for admin review
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - File format validation (JPEG, PNG, WebP only)
+        - File size limits (max 5MB)
+        - AI face detection and liveness verification
+        - Anti-spoofing protection
+        - Rate limiting: 5 requests per hour per authenticated user
+        - Secure file storage with encryption
+        - Content moderation integration
+        - Audit logging for all submissions
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - photo
+                - verification_id
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                  description: Selfie photo file (JPEG, PNG, or WebP, max 5MB)
+                verification_id:
+                  type: string
+                  format: uuid
+                  description: Verification ID received from request endpoint
+      responses:
+        '200':
+          description: Selfie verification submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfieVerificationSubmitResponseDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          description: Payload Too Large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDTO'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /verify/selfie/status:
+    get:
+      tags:
+        - Verification
+      summary: Get selfie verification status
+      description: Retrieves the current status of selfie verification
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Selfie verification status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelfieVerificationStatusResponseDTO'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /verify/document/request:
+    post:
+      tags:
+        - Verification
+      summary: Request document verification
+      description: |
+        Initiates a document verification process and returns a secure upload URL.
+        
+        ## Document Verification Request Process
+        1. Client provides valid JWT token and document type
+        2. System validates token and document type
+        3. Unique verification ID is generated
+        4. Secure presigned upload URL is created
+        5. Upload URL expires after 15 minutes
+        6. Document requirements are validated
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Document type validation (ID card, passport, driver license)
+        - Rate limiting: 3 requests per hour per authenticated user
+        - Secure presigned URL generation
+        - Upload URL expiration (15 minutes)
+        - Document type restrictions
+        - Audit logging for compliance
+        - Anti-fraud protection
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestDocumentVerificationDTO'
+      responses:
+        '200':
+          description: Document verification request successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentVerificationRequestResponseDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /verify/document/submit:
+    post:
+      tags:
+        - Verification
+      summary: Submit document verification
+      description: |
+        Submits a document photo for AI-powered verification and OCR processing.
+        
+        ## Document Verification Process
+        1. Client uploads document using secure presigned URL
+        2. System validates file format and size
+        3. AI performs document detection and analysis
+        4. OCR extracts text and data from document
+        5. Document validation checks authenticity
+        6. Extracted data is compared with profile
+        7. Results are stored for admin review
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - File format validation (JPEG, PNG, WebP only)
+        - File size limits (max 10MB)
+        - AI document detection and OCR processing
+        - Data extraction and validation
+        - Rate limiting: 3 requests per hour per authenticated user
+        - Secure file storage with encryption
+        - PII protection and masking
+        - Audit logging for compliance
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - photo
+                - verification_id
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                  description: Document photo file (JPEG, PNG, or WebP, max 10MB)
+                verification_id:
+                  type: string
+                  format: uuid
+                  description: Verification ID received from request endpoint
+      responses:
+        '200':
+          description: Document verification submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentVerificationSubmitResponseDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          description: Payload Too Large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDTO'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /verify/document/status:
+    get:
+      tags:
+        - Verification
+      summary: Get document verification status
+      description: Retrieves the current status of document verification
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Document verification status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentVerificationStatusResponseDTO'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/verifications:
+    get:
+      tags:
+        - Admin Verification
+      summary: Get pending verifications
+      description: |
+        Retrieves a list of pending verifications for admin review.
+        
+        ## Admin Verification Listing Process
+        1. Client provides valid admin JWT token
+        2. System validates admin permissions
+        3. Pending verifications are retrieved with pagination
+        4. Results are filtered by status and type
+        5. Verification details are included for review
+        6. Admin actions are tracked and logged
+        
+        ## Security Features
+        - Admin JWT token validation with expiry checking
+        - Admin permission verification
+        - Rate limiting: 20 requests per minute per admin user
+        - Pagination to prevent data overload
+        - Access control based on admin role
+        - Audit logging for all admin actions
+        - Data filtering and sorting
+        - Secure data transmission
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of verifications to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of verifications to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: status
+          in: query
+          description: Filter by verification status
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+            default: pending
+        - name: type
+          in: query
+          description: Filter by verification type
+          schema:
+            type: string
+            enum: [selfie, document]
+      responses:
+        '200':
+          description: Pending verifications retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingVerificationsResponseDTO'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/verifications/{id}:
+    get:
+      tags:
+        - Admin Verification
+      summary: Get verification details
+      description: Retrieves detailed information about a specific verification
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Verification ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Verification details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationDetailsResponseDTO'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/verifications/{id}/approve:
+    post:
+      tags:
+        - Admin Verification
+      summary: Approve verification
+      description: |
+        Approves a verification and awards verification badge.
+        
+        ## Verification Approval Process
+        1. Client provides valid admin JWT token and verification ID
+        2. System validates admin permissions and verification status
+        3. Approval reason is recorded for audit
+        4. User verification level is updated
+        5. Verification badge is awarded
+        6. User is notified of approval
+        7. Action is logged for compliance
+        
+        ## Security Features
+        - Admin JWT token validation with expiry checking
+        - Admin permission verification
+        - Verification status validation
+        - Rate limiting: 10 requests per minute per admin user
+        - Approval reason tracking
+        - Audit logging for all approvals
+        - User notification system
+        - Verification level management
+        - Compliance reporting
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Verification ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveVerificationDTO'
+      responses:
+        '200':
+          description: Verification approved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationActionResponseDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/verifications/{id}/reject:
+    post:
+      tags:
+        - Admin Verification
+      summary: Reject verification
+      description: |
+        Rejects a verification with a reason.
+        
+        ## Verification Rejection Process
+        1. Client provides valid admin JWT token and verification ID
+        2. System validates admin permissions and verification status
+        3. Rejection reason is recorded for audit
+        4. User is notified of rejection
+        5. Verification data is archived for compliance
+        6. User may request new verification after cooldown
+        7. Action is logged for audit trail
+        
+        ## Security Features
+        - Admin JWT token validation with expiry checking
+        - Admin permission verification
+        - Verification status validation
+        - Rate limiting: 10 requests per minute per admin user
+        - Rejection reason tracking
+        - Audit logging for all rejections
+        - User notification system
+        - Data archiving for compliance
+        - Rejection appeal process
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Verification ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectVerificationDTO'
+      responses:
+        '200':
+          description: Verification rejected successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationActionResponseDTO'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RequestSelfieVerificationDTO:
+      type: object
+      properties: {}
+
+    RequestDocumentVerificationDTO:
+      type: object
+      required:
+        - document_type
+      properties:
+        document_type:
+          type: string
+          enum: [id_card, passport, driver_license]
+          description: Type of document to verify
+
+    SelfieVerificationRequestResponseDTO:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            verification_id:
+              type: string
+              format: uuid
+              description: Unique verification ID
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            upload_url:
+              type: string
+              format: uri
+              description: Secure URL for uploading selfie photo
+              example: "https://storage.example.com/upload/abc123"
+            expires_at:
+              type: string
+              format: date-time
+              description: Upload URL expiration time
+              example: "2025-12-01T12:00:00Z"
+
+    SelfieVerificationSubmitResponseDTO:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            verification_id:
+              type: string
+              format: uuid
+              description: Verification ID
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            status:
+              type: string
+              enum: [pending, approved, rejected]
+              description: Current verification status
+              example: "pending"
+            ai_score:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+              description: AI confidence score (0.0-1.0)
+              example: 0.92
+            ai_details:
+              type: object
+              description: AI analysis details
+              properties:
+                face_detected:
+                  type: boolean
+                  example: true
+                confidence:
+                  type: number
+                  example: 0.95
+                nsfw_detected:
+                  type: boolean
+                  example: false
+                liveness_detected:
+                  type: boolean
+                  example: true
+            created_at:
+              type: string
+              format: date-time
+              description: Verification creation time
+              example: "2025-12-01T10:00:00Z"
+
+    SelfieVerificationStatusResponseDTO:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            verification_id:
+              type: string
+              format: uuid
+              description: Verification ID
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            status:
+              type: string
+              enum: [pending, approved, rejected]
+              description: Current verification status
+              example: "approved"
+            ai_score:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+              description: AI confidence score (0.0-1.0)
+              example: 0.92
+            ai_details:
+              type: object
+              description: AI analysis details
+            rejection_reason:
+              type: string
+              description: Reason for rejection (if rejected)
+              example: null
+            reviewed_at:
+              type: string
+              format: date-time
+              description: Review completion time
+              example: "2025-12-01T12:30:00Z"
+            expires_at:
+              type: string
+              format: date-time
+              description: Verification expiration time
+              example: "2024-12-01T10:00:00Z"
+            created_at:
+              type: string
+              format: date-time
+              description: Verification creation time
+              example: "2025-12-01T10:00:00Z"
+            updated_at:
+              type: string
+              format: date-time
+              description: Last update time
+              example: "2025-12-01T12:30:00Z"
+
+    DocumentVerificationRequestResponseDTO:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            verification_id:
+              type: string
+              format: uuid
+              description: Unique verification ID
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            upload_url:
+              type: string
+              format: uri
+              description: Secure URL for uploading document photo
+              example: "https://storage.example.com/upload/def456"
+            expires_at:
+              type: string
+              format: date-time
+              description: Upload URL expiration time
+              example: "2025-12-01T12:00:00Z"
+
+    DocumentVerificationSubmitResponseDTO:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            verification_id:
+              type: string
+              format: uuid
+              description: Verification ID
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            status:
+              type: string
+              enum: [pending, approved, rejected]
+              description: Current verification status
+              example: "pending"
+            document_type:
+              type: string
+              enum: [id_card, passport, driver_license]
+              description: Document type
+              example: "passport"
+            extracted_data:
+              type: object
+              description: Extracted document data from OCR
+              properties:
+                document_number:
+                  type: string
+                  example: "P123456789"
+                name:
+                  type: string
+                  example: "John Doe"
+                nationality:
+                  type: string
+                  example: "US"
+                date_of_birth:
+                  type: string
+                  example: "1990-01-01"
+                expiry_date:
+                  type: string
+                  example: "2030-01-01"
+            ai_score:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+              description: AI confidence score (0.0-1.0)
+              example: 0.87
+            ai_details:
+              type: object
+              description: AI analysis details
+              properties:
+                document_detected:
+                  type: boolean
+                  example: true
+                confidence:
+                  type: number
+                  example: 0.87
+                ocr_confidence:
+                  type: number
+                  example: 0.92
+                validation_passed:
+                  type: boolean
+                  example: true
+            created_at:
+              type: string
+              format: date-time
+              description: Verification creation time
+              example: "2025-12-01T10:00:00Z"
+
+    DocumentVerificationStatusResponseDTO:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            verification_id:
+              type: string
+              format: uuid
+              description: Verification ID
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            status:
+              type: string
+              enum: [pending, approved, rejected]
+              description: Current verification status
+              example: "approved"
+            document_type:
+              type: string
+              enum: [id_card, passport, driver_license]
+              description: Document type
+              example: "passport"
+            extracted_data:
+              type: object
+              description: Extracted document data from OCR
+            ai_score:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+              description: AI confidence score (0.0-1.0)
+              example: 0.87
+            ai_details:
+              type: object
+              description: AI analysis details
+            rejection_reason:
+              type: string
+              description: Reason for rejection (if rejected)
+              example: null
+            reviewed_at:
+              type: string
+              format: date-time
+              description: Review completion time
+              example: "2025-12-01T12:30:00Z"
+            expires_at:
+              type: string
+              format: date-time
+              description: Verification expiration time
+              example: "2024-12-01T10:00:00Z"
+            created_at:
+              type: string
+              format: date-time
+              description: Verification creation time
+              example: "2025-12-01T10:00:00Z"
+            updated_at:
+              type: string
+              format: date-time
+              description: Last update time
+              example: "2025-12-01T12:30:00Z"
+
+    PendingVerificationsResponseDTO:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            verifications:
+              type: array
+              items:
+                $ref: '#/components/schemas/VerificationSummaryDTO'
+              description: List of pending verifications
+            total:
+              type: integer
+              description: Total number of pending verifications
+              example: 15
+            limit:
+              type: integer
+              description: Maximum number of verifications returned
+              example: 20
+            offset:
+              type: integer
+              description: Number of verifications skipped
+              example: 0
+
+    VerificationDetailsResponseDTO:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/VerificationDetailsDTO'
+
+    VerificationSummaryDTO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Verification ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        user_id:
+          type: string
+          format: uuid
+          description: User ID
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        type:
+          type: string
+          enum: [selfie, document]
+          description: Verification type
+          example: "selfie"
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+          description: Verification status
+          example: "pending"
+        ai_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: AI confidence score
+          example: 0.92
+        created_at:
+          type: string
+          format: date-time
+          description: Verification creation time
+          example: "2025-12-01T10:00:00Z"
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: User ID
+              example: "550e8400-e29b-41d4-a716-446655440001"
+            first_name:
+              type: string
+              description: User first name
+              example: "John"
+            last_name:
+              type: string
+              description: User last name
+              example: "Doe"
+            email:
+              type: string
+              format: email
+              description: User email
+              example: "john.doe@example.com"
+
+    VerificationDetailsDTO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Verification ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        user_id:
+          type: string
+          format: uuid
+          description: User ID
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        type:
+          type: string
+          enum: [selfie, document]
+          description: Verification type
+          example: "selfie"
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+          description: Verification status
+          example: "pending"
+        photo_url:
+          type: string
+          format: uri
+          description: Verification photo URL
+          example: "https://storage.example.com/photos/verification.jpg"
+        document_type:
+          type: string
+          enum: [id_card, passport, driver_license]
+          description: Document type (for document verifications)
+          example: null
+        extracted_data:
+          type: object
+          description: Extracted document data (for document verifications)
+          example: null
+        ai_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: AI confidence score
+          example: 0.92
+        ai_details:
+          type: object
+          description: AI analysis details
+          example: {"face_detected": true, "confidence": 0.95, "nsfw_detected": false}
+        rejection_reason:
+          type: string
+          description: Reason for rejection (if rejected)
+          example: null
+        reviewed_by:
+          type: string
+          format: uuid
+          description: Admin user ID who reviewed the verification
+          example: null
+        reviewed_at:
+          type: string
+          format: date-time
+          description: Review completion time
+          example: null
+        expires_at:
+          type: string
+          format: date-time
+          description: Verification expiration time
+          example: "2024-12-01T10:00:00Z"
+        created_at:
+          type: string
+          format: date-time
+          description: Verification creation time
+          example: "2025-12-01T10:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update time
+          example: "2025-12-01T10:00:00Z"
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: User ID
+              example: "550e8400-e29b-41d4-a716-446655440001"
+            first_name:
+              type: string
+              description: User first name
+              example: "John"
+            last_name:
+              type: string
+              description: User last name
+              example: "Doe"
+            email:
+              type: string
+              format: email
+              description: User email
+              example: "john.doe@example.com"
+            verification_level:
+              type: integer
+              enum: [0, 1, 2]
+              description: User verification level
+              example: 1
+        reviewer:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: Admin user ID
+              example: null
+            first_name:
+              type: string
+              description: Admin first name
+              example: null
+            last_name:
+              type: string
+              description: Admin last name
+              example: null
+            email:
+              type: string
+              format: email
+              description: Admin email
+              example: null
+
+    ApproveVerificationDTO:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          description: Reason for approval
+          example: "User verified successfully"
+
+    RejectVerificationDTO:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          description: Reason for rejection
+          example: "Photo quality is too low"
+
+    VerificationActionResponseDTO:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            verification_id:
+              type: string
+              format: uuid
+              description: Verification ID
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            status:
+              type: string
+              enum: [approved, rejected]
+              description: New verification status
+              example: "approved"
+            reviewed_at:
+              type: string
+              format: date-time
+              description: Review completion time
+              example: "2025-12-01T12:30:00Z"
+            message:
+              type: string
+              description: Success message
+              example: "Verification approved successfully"
+
+    ErrorDTO:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Error code
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              description: Error message
+              example: "Invalid input parameters"
+            details:
+              type: object
+              description: Additional error details
+
+  responses:
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorDTO'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorDTO'
+
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorDTO'
+
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorDTO'
+
+    TooManyRequests:
+      description: Too Many Requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorDTO'
+
+    InternalServerError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorDTO'
+
+tags:
+  - name: Verification
+    description: User verification operations
+  - name: Admin Verification
+    description: Admin verification management operations

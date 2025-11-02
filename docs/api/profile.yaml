@@ -1,0 +1,769 @@
+openapi: 3.0.3
+info:
+  title: Winkr Profile API
+  description: |
+    API endpoints for user profile management in the Winkr dating application.
+    
+    This API provides comprehensive profile management functionality including:
+    - Profile creation and updates
+    - Location-based matching preferences
+    - Privacy controls and data management
+    - Profile viewing with privacy restrictions
+    - Account deletion with data retention policies
+    - Match management and statistics
+    
+    ## Security Features
+    - JWT-based authentication for all endpoints
+    - Privacy controls for profile visibility
+    - Data encryption for sensitive information
+    - Rate limiting to prevent abuse
+    - Audit logging for profile changes
+    - GDPR compliance for data management
+    
+    ## Rate Limiting
+    - Profile endpoints: 20 requests per minute per authenticated user
+    - Location updates: 10 requests per minute per authenticated user
+    - Profile viewing: 30 requests per minute per authenticated user
+    - Account deletion: 1 request per hour per authenticated user
+  version: 1.0.0
+  contact:
+    name: Winkr API Team
+    email: api@winkr.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.winkr.com/v1
+    description: Production server
+  - url: https://staging-api.winkr.com/v1
+    description: Staging server
+  - url: http://localhost:8080/v1
+    description: Development server
+
+paths:
+  /profile/me:
+    get:
+      tags:
+        - Profile
+      summary: Get current user profile
+      description: Retrieve the current user's profile information including photos, preferences, and statistics
+      security:
+        - bearerAuth
+      responses:
+        '200':
+          description: Profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - Profile
+      summary: Update current user profile
+      description: Update the current user's profile information
+      security:
+        - bearerAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /profile/me/location:
+    put:
+      tags:
+        - Profile
+      summary: Update user location
+      description: Update the current user's location coordinates
+      security:
+        - bearerAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLocationRequest'
+      responses:
+        '200':
+          description: Location updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /profile/me/matches:
+    get:
+      tags:
+        - Profile
+      summary: Get user matches
+      description: Retrieve the current user's matches with pagination
+      security:
+        - bearerAuth
+      parameters:
+        - name: limit
+          in: query
+          description: Number of matches to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of matches to skip
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Matches retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /profile/me/account:
+    delete:
+      tags:
+        - Profile
+      summary: Delete user account
+      description: Delete the current user's account and all associated data
+      security:
+        - bearerAuth
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteAccountRequest'
+      responses:
+        '200':
+          description: Account deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /profile/users/{id}:
+    get:
+      tags:
+        - Profile
+      summary: View user profile
+      description: |
+        View another user's profile with privacy controls.
+        
+        ## Profile Viewing Process
+        1. Client provides valid JWT access token and target user ID
+        2. System validates token and checks viewing permissions
+        3. Privacy settings are applied to profile data
+        4. Sensitive information is filtered based on relationship
+        5. Profile view is logged for analytics and privacy
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Privacy control enforcement
+        - Rate limiting: 30 requests per minute per authenticated user
+        - Profile view tracking
+        - Data filtering based on privacy settings
+        - Anti-stalking protection
+        - View history management
+      security:
+        - bearerAuth
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User ID to view
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token in the format "Bearer {token}"
+
+  schemas:
+    ProfileResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/Profile'
+        error:
+          $ref: '#/components/responses/Error'
+
+    UserProfileResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/UserProfile'
+        error:
+          $ref: '#/components/responses/Error'
+
+    MatchesResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Match'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        error:
+          $ref: '#/components/responses/Error'
+
+    MessageResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Operation completed successfully
+        error:
+          $ref: '#/components/responses/Error'
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: John
+          description: User's first name
+        last_name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: Doe
+          description: User's last name
+        bio:
+          type: string
+          maxLength: 500
+          example: Software developer who loves hiking
+          description: User's bio
+        interested_in:
+          type: array
+          items:
+            type: string
+            enum: [male, female, other]
+          minItems: 1
+          example: [female]
+          description: User's gender preferences
+        preferences:
+          $ref: '#/components/schemas/Preferences'
+
+    UpdateLocationRequest:
+      type: object
+      required:
+        - latitude
+        - longitude
+      properties:
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+          example: 40.7128
+          description: Latitude coordinate
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+          example: -74.0060
+          description: Longitude coordinate
+        city:
+          type: string
+          maxLength: 100
+          example: New York
+          description: City name
+        country:
+          type: string
+          maxLength: 100
+          example: USA
+          description: Country name
+
+    DeleteAccountRequest:
+      type: object
+      properties:
+        password:
+          type: string
+          example: mypassword123
+          description: User's password for confirmation
+        reason:
+          type: string
+          maxLength: 500
+          example: No longer using the app
+          description: Reason for account deletion
+        confirm:
+          type: boolean
+          example: true
+          description: Confirmation that user wants to delete account
+
+    Profile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+          description: User ID
+        email:
+          type: string
+          format: email
+          example: john.doe@example.com
+          description: User email
+        first_name:
+          type: string
+          example: John
+          description: User first name
+        last_name:
+          type: string
+          example: Doe
+          description: User last name
+        date_of_birth:
+          type: string
+          format: date
+          example: 1990-01-01
+          description: User date of birth
+        gender:
+          type: string
+          enum: [male, female, other]
+          example: male
+          description: User gender
+        interested_in:
+          type: array
+          items:
+            type: string
+            enum: [male, female, other]
+          example: [female]
+          description: User's gender preferences
+        bio:
+          type: string
+          example: Software developer who loves hiking
+          description: User bio
+        location:
+          $ref: '#/components/schemas/Location'
+        is_verified:
+          type: boolean
+          example: true
+          description: Whether user is verified
+        is_premium:
+          type: boolean
+          example: false
+          description: Whether user has premium subscription
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Photo'
+          description: User's photos
+        preferences:
+          $ref: '#/components/schemas/Preferences'
+        profile_stats:
+          $ref: '#/components/schemas/ProfileStats'
+        created_at:
+          type: string
+          format: date-time
+          example: 2025-01-01T00:00:00Z
+          description: Account creation date
+        updated_at:
+          type: string
+          format: date-time
+          example: 2025-01-01T12:00:00Z
+          description: Last update date
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+          description: User ID
+        first_name:
+          type: string
+          example: Jane
+          description: User first name
+        age:
+          type: integer
+          minimum: 18
+          maximum: 100
+          example: 28
+          description: User age
+        bio:
+          type: string
+          example: Love traveling and photography
+          description: User bio
+        location:
+          $ref: '#/components/schemas/Location'
+        is_verified:
+          type: boolean
+          example: true
+          description: Whether user is verified
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Photo'
+          description: User's photos
+        profile_stats:
+          $ref: '#/components/schemas/ProfileStats'
+        is_match:
+          type: boolean
+          example: true
+          description: Whether users have matched
+        can_message:
+          type: boolean
+          example: true
+          description: Whether user can send message
+        created_at:
+          type: string
+          format: date-time
+          example: 2025-01-01T00:00:00Z
+          description: Account creation date
+
+    Match:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+          description: Match ID
+        user:
+          $ref: '#/components/schemas/MatchUser'
+        matched_at:
+          type: string
+          format: date-time
+          example: 2025-01-01T12:00:00Z
+          description: Match creation date
+        is_active:
+          type: boolean
+          example: true
+          description: Whether match is active
+        last_message:
+          $ref: '#/components/schemas/Message'
+        unread_count:
+          type: integer
+          minimum: 0
+          example: 2
+          description: Number of unread messages
+        has_conversation:
+          type: boolean
+          example: true
+          description: Whether conversation exists
+
+    MatchUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+          description: User ID
+        first_name:
+          type: string
+          example: Jane
+          description: User first name
+        age:
+          type: integer
+          minimum: 18
+          maximum: 100
+          example: 28
+          description: User age
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Photo'
+          description: User's photos
+
+    Photo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+          description: Photo ID
+        url:
+          type: string
+          format: uri
+          example: https://cdn.datingapp.com/photos/user1/photo1.jpg
+          description: Photo URL
+        is_primary:
+          type: boolean
+          example: true
+          description: Whether photo is primary
+        verification_status:
+          type: string
+          enum: [pending, approved, rejected]
+          example: approved
+          description: Photo verification status
+        verification_reason:
+          type: string
+          example: null
+          description: Reason for verification rejection
+        created_at:
+          type: string
+          format: date-time
+          example: 2025-01-01T00:00:00Z
+          description: Photo upload date
+
+    Location:
+      type: object
+      properties:
+        lat:
+          type: number
+          format: float
+          example: 40.7128
+          description: Latitude coordinate
+        lng:
+          type: number
+          format: float
+          example: -74.0060
+          description: Longitude coordinate
+        city:
+          type: string
+          example: New York
+          description: City name
+        country:
+          type: string
+          example: USA
+          description: Country name
+
+    Preferences:
+      type: object
+      properties:
+        age_min:
+          type: integer
+          minimum: 18
+          maximum: 100
+          example: 25
+          description: Minimum age preference
+        age_max:
+          type: integer
+          minimum: 18
+          maximum: 100
+          example: 35
+          description: Maximum age preference
+        max_distance:
+          type: integer
+          minimum: 1
+          maximum: 500
+          example: 50
+          description: Maximum distance preference in kilometers
+        show_me:
+          type: boolean
+          example: true
+          description: Whether user wants to be shown to others
+
+    ProfileStats:
+      type: object
+      properties:
+        profile_views:
+          type: integer
+          minimum: 0
+          example: 150
+          description: Number of profile views
+        photos_count:
+          type: integer
+          minimum: 0
+          example: 5
+          description: Number of photos
+        profile_complete:
+          type: boolean
+          example: true
+          description: Whether profile is complete
+        last_active:
+          type: string
+          format: date-time
+          example: 2025-01-01T12:00:00Z
+          description: Last active timestamp
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+          description: Message ID
+        content:
+          type: string
+          example: Hey! How are you?
+          description: Message content
+        sender_id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+          description: Sender user ID
+        created_at:
+          type: string
+          format: date-time
+          example: 2025-01-01T12:00:00Z
+          description: Message creation date
+
+    Pagination:
+      type: object
+      properties:
+        total:
+          type: integer
+          minimum: 0
+          example: 50
+          description: Total number of items
+        limit:
+          type: integer
+          minimum: 1
+          example: 20
+          description: Number of items per page
+        offset:
+          type: integer
+          minimum: 0
+          example: 0
+          description: Number of items to skip
+
+  responses:
+    Success:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          description: Response data
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+          example: VALIDATION_ERROR
+          description: Error code
+        message:
+          type: string
+          example: Validation failed
+          description: Error message
+        details:
+          type: string
+          example: First name is required
+          description: Error details
+
+    BadRequest:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          $ref: '#/components/responses/Error'
+
+    Unauthorized:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          $ref: '#/components/responses/Error'
+
+    NotFound:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          $ref: '#/components/responses/Error'
+
+    TooManyRequests:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          $ref: '#/components/responses/Error'
+
+    InternalServerError:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          $ref: '#/components/responses/Error'
+
+tags:
+  - name: Profile
+    description: User profile management operations

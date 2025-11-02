@@ -1,0 +1,930 @@
+openapi: 3.0.3
+info:
+  title: Winkr Discovery API
+  description: |
+    API endpoints for user discovery and matching in the Winkr dating application.
+    
+    This API provides comprehensive discovery and matching functionality including:
+    - User discovery with advanced filtering
+    - Location-based matching with distance preferences
+    - Like/dislike/super-like actions
+    - Mutual match detection and notifications
+    - Match management and statistics
+    - Discovery analytics and insights
+    - Premium features integration
+    
+    ## Security Features
+    - JWT-based authentication for all endpoints
+    - Advanced filtering with privacy controls
+    - Rate limiting to prevent abuse and bot activity
+    - Location privacy and geofencing
+    - Match algorithm protection against manipulation
+    - Audit logging for all discovery actions
+    - Anti-bot and fraud detection
+    - Content moderation integration
+    
+    ## Rate Limiting
+    - User discovery: 30 requests per minute per authenticated user
+    - Like actions: 60 requests per minute per authenticated user
+    - Dislike actions: 60 requests per minute per authenticated user
+    - Super-like actions: 10 requests per minute per authenticated user
+    - Match retrieval: 20 requests per minute per authenticated user
+    - Statistics retrieval: 10 requests per minute per authenticated user
+  version: 1.0.0
+  contact:
+    name: Winkr API Team
+    email: api@winkr.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.winkr.com/v1
+    description: Production server
+  - url: https://staging-api.winkr.com/v1
+    description: Staging server
+  - url: http://localhost:8080/v1
+    description: Development server
+
+paths:
+  /api/v1/discover:
+    get:
+      tags:
+        - discovery
+      summary: Discover users for matching
+      description: |
+        Get a list of potential matches based on user preferences and location.
+        
+        ## Discovery Process
+        1. Client provides valid JWT token and discovery preferences
+        2. System validates token and user preferences
+        3. Matching algorithm finds compatible users
+        4. Results are filtered by distance, age, and preferences
+        5. Privacy settings are applied to results
+        6. Pagination is used for efficient data retrieval
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Advanced filtering with privacy controls
+        - Rate limiting: 30 requests per minute per authenticated user
+        - Location privacy and geofencing
+        - Anti-bot detection and protection
+        - Content filtering and moderation
+        - Preference validation and sanitization
+        - Result caching for performance
+      operationId: discoverUsers
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: User ID from JWT token
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Number of results to return
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of results to skip
+        - name: age_min
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 18
+            maximum: 100
+          description: Minimum age filter
+        - name: age_max
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 18
+            maximum: 100
+          description: Maximum age filter
+        - name: max_distance
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+          description: Maximum distance in kilometers
+        - name: gender
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [male, female, other]
+          description: Gender filter
+        - name: verified
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter by verification status
+        - name: has_photos
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter by users with photos
+      responses:
+        '200':
+          description: Successful discovery
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoverUsersResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/like/{id}:
+    post:
+      tags:
+        - discovery
+      summary: Like a user
+      description: |
+        Like a user and check for mutual match.
+        
+        ## Like Process
+        1. Client provides valid JWT token and target user ID
+        2. System validates token and user permissions
+        3. Check if user has already been swiped
+        4. Record like action in database
+        5. Check for mutual match
+        6. Trigger notifications if match is made
+        7. Update discovery statistics
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Duplicate swipe prevention
+        - Rate limiting: 60 requests per minute per authenticated user
+        - Match detection and notification
+        - Audit logging for all like actions
+        - Anti-spam protection
+        - User preference validation
+        - Real-time match notifications
+      operationId: likeUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: User ID to like
+      responses:
+        '200':
+          description: Successful like
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LikeUserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: User already swiped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/dislike/{id}:
+    post:
+      tags:
+        - discovery
+      summary: Dislike a user
+      description: |
+        Dislike/skip a user.
+        
+        ## Dislike Process
+        1. Client provides valid JWT token and target user ID
+        2. System validates token and user permissions
+        3. Check if user has already been swiped
+        4. Record dislike action in database
+        5. Update matching algorithm preferences
+        6. Update discovery statistics
+        7. Remove user from future discovery results
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Duplicate swipe prevention
+        - Rate limiting: 60 requests per minute per authenticated user
+        - Algorithm learning from preferences
+        - Audit logging for all dislike actions
+        - Anti-spam protection
+        - Preference optimization
+        - Result filtering updates
+      operationId: dislikeUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: User ID to dislike
+      responses:
+        '200':
+          description: Successful dislike
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DislikeUserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: User already swiped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/superlike/{id}:
+    post:
+      tags:
+        - discovery
+      summary: Super like a user
+      description: |
+        Super like a user (premium feature) and check for mutual match.
+        
+        ## Super Like Process
+        1. Client provides valid JWT token and target user ID
+        2. System validates token and premium subscription
+        3. Check if user has already been swiped
+        4. Record super like action in database
+        5. Check for mutual match with priority
+        6. Trigger enhanced notifications if match is made
+        7. Update discovery statistics
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Premium subscription verification
+        - Duplicate swipe prevention
+        - Rate limiting: 10 requests per minute per authenticated user
+        - Enhanced match priority
+        - Audit logging for all super like actions
+        - Premium feature access control
+        - Enhanced notification delivery
+      operationId: superLikeUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: User ID to super like
+      responses:
+        '200':
+          description: Successful super like
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuperLikeUserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          description: Premium subscription required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: User already swiped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/matches:
+    get:
+      tags:
+        - discovery
+      summary: Get user's matches
+      description: |
+        Get a list of user's mutual matches.
+        
+        ## Match Retrieval Process
+        1. Client provides valid JWT token
+        2. System validates token and extracts user ID
+        3. User's mutual matches are retrieved
+        4. Match details and conversation status are included
+        5. Privacy settings are applied to match data
+        6. Pagination is used for efficient data retrieval
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Match ownership verification
+        - Rate limiting: 20 requests per minute per authenticated user
+        - Privacy filtering based on user settings
+        - Conversation status tracking
+        - Unread count calculation
+        - Match activity monitoring
+        - Cross-device synchronization
+      operationId: getMatches
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Number of results to return
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of results to skip
+        - name: unread_only
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Only return unread matches
+      responses:
+        '200':
+          description: Successful retrieval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMatchesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/discover/stats:
+    get:
+      tags:
+        - discovery
+      summary: Get discovery statistics
+      description: |
+        Get user's discovery and matching statistics.
+        
+        ## Statistics Process
+        1. Client provides valid JWT token
+        2. System validates token and extracts user ID
+        3. Comprehensive statistics are calculated
+        4. Performance metrics are included
+        5. Time-based analytics are provided
+        6. Privacy-safe data aggregation
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Statistics ownership verification
+        - Rate limiting: 10 requests per minute per authenticated user
+        - Privacy-safe data aggregation
+        - Performance metric calculation
+        - Time-based analytics
+        - Audit logging for statistics access
+        - Data anonymization for privacy
+      operationId: getDiscoveryStats
+      responses:
+        '200':
+          description: Successful retrieval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetDiscoveryStatsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  schemas:
+    DiscoverUsersResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveryUser'
+        total:
+          type: integer
+          format: int64
+          description: Total number of potential matches
+        has_more:
+          type: boolean
+          description: Whether there are more results
+        next_cursor:
+          type: string
+          description: Cursor for pagination
+      required:
+        - users
+        - total
+        - has_more
+
+    DiscoveryUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: User ID
+        first_name:
+          type: string
+          description: User's first name
+        age:
+          type: integer
+          minimum: 18
+          maximum: 100
+          description: User's age
+        bio:
+          type: string
+          nullable: true
+          description: User's bio
+        location:
+          $ref: '#/components/schemas/Location'
+          description: User's location
+        distance:
+          type: number
+          format: float
+          description: Distance in kilometers
+        is_verified:
+          type: boolean
+          description: Whether user is verified
+        verification_level:
+          type: integer
+          enum: [0, 1, 2]
+          description: User's verification level
+        is_premium:
+          type: boolean
+          description: Whether user has premium subscription
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Photo'
+          description: User's photos
+        last_active:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last active timestamp
+        created_at:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+      required:
+        - id
+        - first_name
+        - age
+        - is_verified
+        - verification_level
+        - is_premium
+        - photos
+        - created_at
+
+    Location:
+      type: object
+      properties:
+        lat:
+          type: number
+          format: float
+          description: Latitude
+        lng:
+          type: number
+          format: float
+          description: Longitude
+        city:
+          type: string
+          nullable: true
+          description: City name
+        country:
+          type: string
+          nullable: true
+          description: Country name
+      required:
+        - lat
+        - lng
+
+    Photo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Photo ID
+        url:
+          type: string
+          format: uri
+          description: Photo URL
+        is_primary:
+          type: boolean
+          description: Whether this is the primary photo
+        verification_status:
+          type: string
+          enum: [pending, approved, rejected]
+          description: Photo verification status
+      required:
+        - id
+        - url
+        - is_primary
+        - verification_status
+
+    LikeUserResponse:
+      type: object
+      properties:
+        is_match:
+          type: boolean
+          description: Whether this like resulted in a match
+        match:
+          $ref: '#/components/schemas/Match'
+          description: Match details if a match was made
+      required:
+        - is_match
+
+    DislikeUserResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Whether the dislike was successful
+      required:
+        - success
+
+    SuperLikeUserResponse:
+      type: object
+      properties:
+        is_match:
+          type: boolean
+          description: Whether this super like resulted in a match
+        match:
+          $ref: '#/components/schemas/Match'
+          description: Match details if a match was made
+      required:
+        - is_match
+
+    Match:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Match ID
+        user1_id:
+          type: string
+          format: uuid
+          description: First user ID
+        user2_id:
+          type: string
+          format: uuid
+          description: Second user ID
+        matched_at:
+          type: string
+          format: date-time
+          description: When the match was created
+        is_active:
+          type: boolean
+          description: Whether the match is active
+        user:
+          $ref: '#/components/schemas/MatchUser'
+          description: The other user in the match
+      required:
+        - id
+        - user1_id
+        - user2_id
+        - matched_at
+        - is_active
+        - user
+
+    MatchUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: User ID
+        first_name:
+          type: string
+          description: User's first name
+        age:
+          type: integer
+          minimum: 18
+          maximum: 100
+          description: User's age
+        bio:
+          type: string
+          nullable: true
+          description: User's bio
+        is_verified:
+          type: boolean
+          description: Whether user is verified
+        verification_level:
+          type: integer
+          enum: [0, 1, 2]
+          description: User's verification level
+        is_premium:
+          type: boolean
+          description: Whether user has premium subscription
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Photo'
+          description: User's photos
+      required:
+        - id
+        - first_name
+        - age
+        - is_verified
+        - verification_level
+        - is_premium
+        - photos
+
+    GetMatchesResponse:
+      type: object
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/MatchWithDetails'
+        total:
+          type: integer
+          format: int64
+          description: Total number of matches
+        has_more:
+          type: boolean
+          description: Whether there are more results
+        next_cursor:
+          type: string
+          description: Cursor for pagination
+      required:
+        - matches
+        - total
+        - has_more
+
+    MatchWithDetails:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Match ID
+        user1_id:
+          type: string
+          format: uuid
+          description: First user ID
+        user2_id:
+          type: string
+          format: uuid
+          description: Second user ID
+        matched_at:
+          type: string
+          format: date-time
+          description: When the match was created
+        is_active:
+          type: boolean
+          description: Whether the match is active
+        user:
+          $ref: '#/components/schemas/MatchUser'
+          description: The other user in the match
+        last_message:
+          $ref: '#/components/schemas/Message'
+          description: Last message in the match
+        unread_count:
+          type: integer
+          minimum: 0
+          description: Number of unread messages
+        has_conversation:
+          type: boolean
+          description: Whether a conversation has been started
+      required:
+        - id
+        - user1_id
+        - user2_id
+        - matched_at
+        - is_active
+        - user
+        - unread_count
+        - has_conversation
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Message ID
+        content:
+          type: string
+          description: Message content
+        message_type:
+          type: string
+          enum: [text, image, gif]
+          description: Message type
+        is_read:
+          type: boolean
+          description: Whether message has been read
+        sender_id:
+          type: string
+          format: uuid
+          description: Sender user ID
+        created_at:
+          type: string
+          format: date-time
+          description: Message creation timestamp
+      required:
+        - id
+        - content
+        - message_type
+        - is_read
+        - sender_id
+        - created_at
+
+    GetDiscoveryStatsResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: User ID
+        total_swipes:
+          type: integer
+          format: int64
+          description: Total number of swipes
+        total_likes:
+          type: integer
+          format: int64
+          description: Total number of likes
+        total_passes:
+          type: integer
+          format: int64
+          description: Total number of passes
+        total_matches:
+          type: integer
+          format: int64
+          description: Total number of matches
+        active_matches:
+          type: integer
+          format: int64
+          description: Number of active matches
+        like_rate:
+          type: number
+          format: float
+          description: Like rate percentage
+        match_rate:
+          type: number
+          format: float
+          description: Match rate percentage
+        swipes_today:
+          type: integer
+          format: int64
+          description: Number of swipes today
+        swipes_this_week:
+          type: integer
+          format: int64
+          description: Number of swipes this week
+        swipes_this_month:
+          type: integer
+          format: int64
+          description: Number of swipes this month
+        matches_today:
+          type: integer
+          format: int64
+          description: Number of matches today
+        matches_this_week:
+          type: integer
+          format: int64
+          description: Number of matches this week
+        matches_this_month:
+          type: integer
+          format: int64
+          description: Number of matches this month
+        profile_views:
+          type: integer
+          format: int64
+          description: Number of profile views
+        photos_count:
+          type: integer
+          format: int64
+          description: Number of photos
+        last_active_days:
+          type: integer
+          description: Days since last active
+        account_age_days:
+          type: integer
+          description: Days since account creation
+        generated_at:
+          type: string
+          format: date-time
+          description: When stats were generated
+      required:
+        - user_id
+        - total_swipes
+        - total_likes
+        - total_passes
+        - total_matches
+        - active_matches
+        - like_rate
+        - match_rate
+        - generated_at
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+      required:
+        - error
+        - code
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooManyRequests:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT authentication
+
+security:
+  - BearerAuth: []

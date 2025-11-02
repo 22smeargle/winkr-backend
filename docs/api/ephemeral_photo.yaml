@@ -1,0 +1,1013 @@
+openapi: 3.0.3
+info:
+  title: Winkr Ephemeral Photo API
+  description: API for managing ephemeral photos in the Winkr dating application
+  version: 1.0.0
+  contact:
+    name: Winkr API Team
+    email: api@winkr.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.winkr.com/v1
+    description: Production server
+  - url: https://staging-api.winkr.com/v1
+    description: Staging server
+  - url: http://localhost:8080/v1
+    description: Development server
+
+paths:
+  /ephemeral-photos:
+    post:
+      tags:
+        - Ephemeral Photos
+      summary: Upload an ephemeral photo
+      description: |
+        Upload a new ephemeral photo that will automatically expire after viewing or time-based expiration.
+        
+        ## Ephemeral Photo Upload Process
+        1. Client provides valid JWT token and photo file
+        2. System validates token and file format/size
+        3. Photo is processed and thumbnails are generated
+        4. Secure access key is generated for sharing
+        5. Expiration settings are applied (view count and/or time)
+        6. Photo is stored with encryption
+        7. Upload is logged for audit and analytics
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - File format validation (JPEG, PNG, WebP only)
+        - File size limits (max 5MB)
+        - Secure access key generation (32-character random)
+        - Content moderation and safety checks
+        - Rate limiting: 10 requests per minute per authenticated user
+        - Automatic expiration enforcement
+        - Privacy controls and access restrictions
+        - Audit logging for compliance
+        - Anti-screenshot protection
+        - Secure storage with encryption
+      operationId: uploadEphemeralPhoto
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The photo file to upload (max 5MB, JPEG/PNG/WebP)
+                caption:
+                  type: string
+                  maxLength: 500
+                  description: Optional caption for the photo
+                duration_seconds:
+                  type: integer
+                  minimum: 10
+                  maximum: 300
+                  default: 30
+                  description: Custom duration in seconds (10-300s, default: 30s)
+                max_views:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  default: 1
+                  description: Maximum number of views allowed (1-10, default: 1)
+      responses:
+        '201':
+          description: Ephemeral photo uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EphemeralPhotoUploadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /ephemeral-photos/{id}/view:
+    get:
+      tags:
+        - Ephemeral Photos
+      summary: View an ephemeral photo
+      description: |
+        Access an ephemeral photo using its access key. The photo will be marked as viewed and may expire after viewing.
+        
+        ## Ephemeral Photo Viewing Process
+        1. Client provides valid JWT token and access key
+        2. System validates token and access key
+        3. Access permissions are checked
+        4. View count is incremented
+        5. Expiration status is evaluated
+        6. Photo is served with security headers
+        7. View is logged for analytics
+        8. Automatic cleanup is triggered if limits reached
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Access key validation (32-character secure strings)
+        - Rate limiting: 30 requests per minute per authenticated user
+        - View count tracking and enforcement
+        - Expiration status validation
+        - Anti-screenshot and download protection
+        - Secure content delivery with cache controls
+        - Privacy protection and access control
+        - Audit logging for all views
+        - Automatic cleanup after expiration
+      operationId: viewEphemeralPhoto
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The ephemeral photo ID
+        - name: access_key
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 32
+            maxLength: 32
+          description: The access key for the photo
+        - name: download
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Whether to download the photo (may be prevented by security settings)
+      responses:
+        '200':
+          description: Ephemeral photo retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EphemeralPhotoViewResponse'
+            image/*:
+              schema:
+                type: string
+                format: binary
+              description: The photo file (if download=true)
+          headers:
+            Cache-Control:
+              description: Cache control header
+              schema:
+                type: string
+                example: "no-cache, no-store, must-revalidate"
+            X-Photo-Expires-At:
+              description: Expiration timestamp
+              schema:
+                type: string
+                format: date-time
+            X-Photo-View-Count:
+              description: Current view count
+              schema:
+                type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          description: Photo has expired or been viewed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /ephemeral-photos/{id}:
+    delete:
+      tags:
+        - Ephemeral Photos
+      summary: Delete an ephemeral photo
+      description: |
+        Delete an ephemeral photo before it expires. Only the photo owner can delete it.
+        
+        ## Ephemeral Photo Deletion Process
+        1. Client provides valid JWT token and photo ID
+        2. System validates token and photo ownership
+        3. Photo is immediately marked as deleted
+        4. Access keys are invalidated
+        5. Photo is removed from storage
+        6. Deletion is logged for audit
+        7. Related chat messages are updated
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Photo ownership verification
+        - Rate limiting: 20 requests per minute per authenticated user
+        - Immediate access key invalidation
+        - Secure storage deletion
+        - Audit logging for compliance
+        - Privacy protection and data cleanup
+        - Related message updates
+        - Anti-recovery protection
+      operationId: deleteEphemeralPhoto
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The ephemeral photo ID
+      responses:
+        '200':
+          description: Ephemeral photo deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EphemeralPhotoDeleteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /ephemeral-photos/{id}/status:
+    get:
+      tags:
+        - Ephemeral Photos
+      summary: Get ephemeral photo status
+      description: |
+        Get the current status of an ephemeral photo including view count and expiration time.
+        
+        ## Status Check Process
+        1. Client provides valid JWT token and photo ID
+        2. System validates token and photo ownership
+        3. Current status is retrieved with all metadata
+        4. View count and expiration are calculated
+        5. Access permissions are evaluated
+        6. Status is returned with security information
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Photo ownership verification
+        - Rate limiting: 30 requests per minute per authenticated user
+        - Privacy filtering based on user relationship
+        - Access control validation
+        - Status calculation and validation
+        - Audit logging for status checks
+        - Privacy protection for sensitive data
+        - Secure data transmission
+      operationId: getEphemeralPhotoStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The ephemeral photo ID
+      responses:
+        '200':
+          description: Photo status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EphemeralPhotoStatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /ephemeral-photos/{id}/expire:
+    post:
+      tags:
+        - Ephemeral Photos
+      summary: Manually expire an ephemeral photo
+      description: |
+        Manually expire an ephemeral photo before its automatic expiration. Only the photo owner can expire it.
+        
+        ## Manual Expiration Process
+        1. Client provides valid JWT token and photo ID
+        2. System validates token and photo ownership
+        3. Photo is immediately marked as expired
+        4. Access keys are invalidated
+        5. Photo is removed from active listings
+        6. Expiration is logged for audit
+        7. Related chat messages are updated
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Photo ownership verification
+        - Rate limiting: 5 requests per minute per authenticated user
+        - Immediate access key invalidation
+        - Secure storage cleanup
+        - Audit logging for compliance
+        - Privacy protection and data cleanup
+        - Related message updates
+        - Anti-recovery protection
+      operationId: expireEphemeralPhoto
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The ephemeral photo ID
+      responses:
+        '200':
+          description: Ephemeral photo expired successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EphemeralPhotoExpireResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          description: Photo has already expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /ephemeral-photos/my:
+    get:
+      tags:
+        - Ephemeral Photos
+      summary: Get user's ephemeral photos
+      description: |
+        Get a list of the current user's ephemeral photos with their status.
+        
+        ## Photo Listing Process
+        1. Client provides valid JWT token
+        2. System validates token and extracts user ID
+        3. User's ephemeral photos are retrieved
+        4. Status and metadata are calculated for each photo
+        5. Privacy settings are applied to results
+        6. Pagination is used for efficient data retrieval
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Photo ownership verification
+        - Rate limiting: 20 requests per minute per authenticated user
+        - Privacy filtering based on user settings
+        - Pagination to prevent data overload
+        - Status calculation and validation
+        - Audit logging for all access
+        - Privacy protection for sensitive data
+        - Secure data transmission
+      operationId: getUserEphemeralPhotos
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, viewed, expired, deleted]
+            description: Filter by photo status
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Number of photos to return
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of photos to skip
+      responses:
+        '200':
+          description: User's ephemeral photos retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEphemeralPhotosResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /chats/{conversationId}/ephemeral-photos:
+    post:
+      tags:
+        - Chat Integration
+      summary: Send ephemeral photo in chat
+      description: |
+        Send an existing ephemeral photo as a message in a conversation.
+        
+        ## Chat Integration Process
+        1. Client provides valid JWT token and conversation ID
+        2. System validates token and conversation access
+        3. Photo ownership and permissions are verified
+        4. New access key is generated for recipient
+        5. Photo message is created with metadata
+        6. Message is delivered via WebSocket
+        7. View tracking is enabled for recipient
+        8. Delivery status is tracked
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Conversation access verification
+        - Photo ownership verification
+        - Rate limiting: 15 requests per minute per authenticated user
+        - Secure access key generation for recipient
+        - Message delivery tracking
+        - Privacy controls and access restrictions
+        - Audit logging for all shares
+        - Anti-spam and abuse protection
+        - Real-time delivery via WebSocket
+      operationId: sendEphemeralPhotoMessage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The conversation ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - photo_id
+              properties:
+                photo_id:
+                  type: string
+                  format: uuid
+                  description: The ephemeral photo ID to send
+                message:
+                  type: string
+                  maxLength: 500
+                  description: Optional message to accompany the photo
+      responses:
+        '201':
+          description: Ephemeral photo message sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EphemeralPhotoMessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /chats/{conversationId}/messages/{messageId}/ephemeral-photo:
+    get:
+      tags:
+        - Chat Integration
+      summary: Get ephemeral photo message details
+      description: |
+        Get details of an ephemeral photo message including access information.
+        
+        ## Message Details Process
+        1. Client provides valid JWT token and message ID
+        2. System validates token and message access
+        3. Message details are retrieved with access info
+        4. Photo access permissions are evaluated
+        5. View status and expiration are included
+        6. Delivery information is provided
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Message access verification
+        - Rate limiting: 30 requests per minute per authenticated user
+        - Privacy filtering based on user relationship
+        - Access control validation
+        - Status calculation and validation
+        - Audit logging for all access
+        - Privacy protection for sensitive data
+        - Secure data transmission
+      operationId: getEphemeralPhotoMessage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The conversation ID
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The message ID
+      responses:
+        '200':
+          description: Ephemeral photo message details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EphemeralPhotoMessageDetailsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    EphemeralPhotoUploadResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Ephemeral photo uploaded successfully"
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            access_key:
+              type: string
+              example: "a1b2c3d4e5f6789012345678901234567890ab"
+            thumbnail_url:
+              type: string
+              example: "https://cdn.winkr.com/ephemeral/thumbnails/550e8400-e29b-41d4-a716-446655440000.jpg"
+            expires_at:
+              type: string
+              format: date-time
+              example: "2025-12-01T12:00:00Z"
+            max_views:
+              type: integer
+              example: 1
+            duration_seconds:
+              type: integer
+              example: 30
+            view_count:
+              type: integer
+              example: 0
+            is_viewed:
+              type: boolean
+              example: false
+            is_expired:
+              type: boolean
+              example: false
+
+    EphemeralPhotoViewResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Photo retrieved successfully"
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            url:
+              type: string
+              example: "https://cdn.winkr.com/ephemeral/photos/550e8400-e29b-41d4-a716-446655440000.jpg"
+            thumbnail_url:
+              type: string
+              example: "https://cdn.winkr.com/ephemeral/thumbnails/550e8400-e29b-41d4-a716-446655440000.jpg"
+            expires_at:
+              type: string
+              format: date-time
+              example: "2025-12-01T12:00:00Z"
+            view_count:
+              type: integer
+              example: 1
+            max_views:
+              type: integer
+              example: 1
+            is_viewed:
+              type: boolean
+              example: true
+            is_expired:
+              type: boolean
+              example: false
+            caption:
+              type: string
+              example: "Check out this photo!"
+            created_at:
+              type: string
+              format: date-time
+              example: "2025-12-01T11:30:00Z"
+
+    EphemeralPhotoDeleteResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Ephemeral photo deleted successfully"
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            deleted_at:
+              type: string
+              format: date-time
+              example: "2025-12-01T11:45:00Z"
+
+    EphemeralPhotoStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Photo status retrieved successfully"
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            thumbnail_url:
+              type: string
+              example: "https://cdn.winkr.com/ephemeral/thumbnails/550e8400-e29b-41d4-a716-446655440000.jpg"
+            expires_at:
+              type: string
+              format: date-time
+              example: "2025-12-01T12:00:00Z"
+            view_count:
+              type: integer
+              example: 0
+            max_views:
+              type: integer
+              example: 1
+            is_viewed:
+              type: boolean
+              example: false
+            is_expired:
+              type: boolean
+              example: false
+            status:
+              type: string
+              enum: [active, viewed, expired, deleted]
+              example: "active"
+            created_at:
+              type: string
+              format: date-time
+              example: "2025-12-01T11:30:00Z"
+            updated_at:
+              type: string
+              format: date-time
+              example: "2025-12-01T11:30:00Z"
+
+    EphemeralPhotoExpireResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Ephemeral photo expired successfully"
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            expired_at:
+              type: string
+              format: date-time
+              example: "2025-12-01T11:45:00Z"
+
+    UserEphemeralPhotosResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "User's ephemeral photos retrieved successfully"
+        data:
+          type: object
+          properties:
+            photos:
+              type: array
+              items:
+                $ref: '#/components/schemas/EphemeralPhotoSummary'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+
+    EphemeralPhotoSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        thumbnail_url:
+          type: string
+          example: "https://cdn.winkr.com/ephemeral/thumbnails/550e8400-e29b-41d4-a716-446655440000.jpg"
+        expires_at:
+          type: string
+          format: date-time
+          example: "2025-12-01T12:00:00Z"
+        view_count:
+          type: integer
+          example: 0
+        max_views:
+          type: integer
+          example: 1
+        is_viewed:
+          type: boolean
+          example: false
+        is_expired:
+          type: boolean
+          example: false
+        status:
+          type: string
+          enum: [active, viewed, expired, deleted]
+          example: "active"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-12-01T11:30:00Z"
+
+    EphemeralPhotoMessageResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Ephemeral photo message sent successfully"
+        data:
+          type: object
+          properties:
+            message_id:
+              type: string
+              format: uuid
+              example: "550e8400-e29b-41d4-a716-446655440001"
+            photo_id:
+              type: string
+              format: uuid
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            access_key:
+              type: string
+              example: "a1b2c3d4e5f6789012345678901234567890ab"
+            thumbnail_url:
+              type: string
+              example: "https://cdn.winkr.com/ephemeral/thumbnails/550e8400-e29b-41d4-a716-446655440000.jpg"
+            expires_at:
+              type: string
+              format: date-time
+              example: "2025-12-01T12:00:00Z"
+            delivery_time_ms:
+              type: integer
+              example: 150
+
+    EphemeralPhotoMessageDetailsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Ephemeral photo message details retrieved successfully"
+        data:
+          type: object
+          properties:
+            message:
+              $ref: '#/components/schemas/Message'
+            photo_id:
+              type: string
+              format: uuid
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            access_key:
+              type: string
+              example: "a1b2c3d4e5f6789012345678901234567890ab"
+            thumbnail_url:
+              type: string
+              example: "https://cdn.winkr.com/ephemeral/thumbnails/550e8400-e29b-41d4-a716-446655440000.jpg"
+            expires_at:
+              type: string
+              format: date-time
+              example: "2025-12-01T12:00:00Z"
+            is_viewed:
+              type: boolean
+              example: false
+            view_count:
+              type: integer
+              example: 0
+            can_view:
+              type: boolean
+              example: true
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        conversation_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440002"
+        sender_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440003"
+        content:
+          type: string
+          example: '{"type":"ephemeral_photo","photo_id":"550e8400-e29b-41d4-a716-446655440000","access_key":"a1b2c3d4e5f6789012345678901234567890ab","thumbnail_url":"https://cdn.winkr.com/ephemeral/thumbnails/550e8400-e29b-41d4-a716-446655440000.jpg","expires_at":"2025-12-01T12:00:00Z","message":"Check this out!"}'
+        message_type:
+          type: string
+          enum: [text, image, gif, ephemeral_photo]
+          example: "ephemeral_photo"
+        is_read:
+          type: boolean
+          example: false
+        is_deleted:
+          type: boolean
+          example: false
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-12-01T11:30:00Z"
+
+    Pagination:
+      type: object
+      properties:
+        limit:
+          type: integer
+          example: 20
+        offset:
+          type: integer
+          example: 0
+        total:
+          type: integer
+          example: 50
+        has_more:
+          type: boolean
+          example: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Bad request"
+        message:
+          type: string
+          example: "Invalid request parameters"
+        code:
+          type: string
+          example: "INVALID_REQUEST"
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    PayloadTooLarge:
+      description: File too large
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    TooManyRequests:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+tags:
+  - name: Ephemeral Photos
+    description: Ephemeral photo management endpoints
+  - name: Chat Integration
+    description: Chat integration endpoints for ephemeral photos

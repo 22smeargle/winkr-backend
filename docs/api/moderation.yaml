@@ -1,0 +1,2455 @@
+openapi: 3.0.3
+info:
+  title: WinKr Dating App - Moderation API
+  description: |
+    Comprehensive moderation system with AI-powered content analysis, user reporting, 
+    blocking functionality, and administrative moderation tools.
+    
+    ## Features
+    - AI-powered content moderation with AWS Rekognition
+    - User reporting and blocking system
+    - Administrative moderation tools
+    - Appeal process for moderation actions
+    - Real-time content analysis
+    - Comprehensive analytics and insights
+    
+    ## Authentication
+    All endpoints require JWT authentication. Admin endpoints require additional admin privileges.
+    
+    ## Rate Limiting
+    Moderation endpoints have specific rate limits to prevent abuse:
+    - Reports: 5 per minute, 50 per hour, 200 per day
+    - Blocks: 10 per minute, 100 per hour, 500 per day
+    - Appeals: 2 per minute, 10 per hour, 20 per day
+    - Admin actions: 20 per minute, 500 per hour
+  version: 1.0.0
+  contact:
+    name: WinKr API Support
+    email: api-support@winkr.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.winkr.com/v1
+    description: Production server
+  - url: https://staging-api.winkr.com/v1
+    description: Staging server
+  - url: http://localhost:8080/v1
+    description: Development server
+
+paths:
+  /report:
+    post:
+      tags:
+        - Moderation
+      summary: Report user or content
+      description: |
+        Report a user or specific content for violating community guidelines.
+        The report will be processed by AI moderation and may be escalated to human moderators.
+        
+        **Rate Limit:** 5 requests per minute, 50 per hour, 200 per day
+      operationId: reportContent
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportRequest'
+            examples:
+              report_user:
+                summary: Report inappropriate user behavior
+                value:
+                  reported_user_id: "550e8400-e29b-41d4-a716-446655440000"
+                  reason: "inappropriate_behavior"
+                  description: "User sending harassing messages and inappropriate content"
+              report_content:
+                summary: Report specific content
+                value:
+                  reported_user_id: "550e8400-e29b-41d4-a716-446655440000"
+                  reason: "inappropriate_content"
+                  content_type: "photo"
+                  content_id: "photo_123456"
+                  description: "Photo contains inappropriate content"
+      responses:
+        '201':
+          description: Report submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+              examples:
+                success:
+                  summary: Report created
+                  value:
+                    id: "550e8400-e29b-41d4-a716-446655440001"
+                    status: "pending"
+                    created_at: "2025-01-01T12:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /block/{userId}:
+    post:
+      tags:
+        - Moderation
+      summary: Block a user
+      description: |
+        Block a user to prevent all future interactions. This is a mutual block - 
+        both users will not be able to see or interact with each other.
+        
+        **Rate Limit:** 10 requests per minute, 100 per hour, 500 per day
+      operationId: blockUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: ID of the user to block
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BlockRequest'
+            example:
+              reason: "Harassment and inappropriate messages"
+      responses:
+        '201':
+          description: User blocked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockResponse'
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440002"
+                blocker_id: "550e8400-e29b-41d4-a716-446655440001"
+                blocked_id: "550e8400-e29b-41d4-a716-446655440000"
+                created_at: "2025-01-01T12:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Moderation
+      summary: Unblock a user
+      description: |
+        Remove a user from your blocked list. This will allow interactions with that user again.
+        
+        **Rate Limit:** 10 requests per minute, 100 per hour, 500 per day
+      operationId: unblockUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: ID of the user to unblock
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: User unblocked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnblockResponse'
+              example:
+                message: "User unblocked successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /block/{userId}/status:
+    get:
+      tags:
+        - Moderation
+      summary: Check block status
+      description: Check if you have blocked a specific user or if they have blocked you
+      operationId: checkBlockStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: ID of the user to check block status for
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Block status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockStatusResponse'
+              examples:
+                not_blocked:
+                  summary: No block exists
+                  value:
+                    blocked: false
+                    blocked_by: null
+                    blocked_at: null
+                blocked_by_you:
+                  summary: You blocked the user
+                  value:
+                    blocked: true
+                    blocked_by: "you"
+                    blocked_at: "2025-01-01T12:00:00Z"
+                blocked_by_them:
+                  summary: User blocked you
+                  value:
+                    blocked: true
+                    blocked_by: "them"
+                    blocked_at: "2025-01-01T12:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /block/{userId}/mutual:
+    get:
+      tags:
+        - Moderation
+      summary: Check mutual block status
+      description: Check if there is a mutual block between you and another user
+      operationId: checkMutualBlock
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: ID of the user to check mutual block status for
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Mutual block status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MutualBlockResponse'
+              examples:
+                no_mutual_block:
+                  summary: No mutual block
+                  value:
+                    mutual_block: false
+                    you_blocked_them: false
+                    they_blocked_you: false
+                mutual_block:
+                  summary: Mutual block exists
+                  value:
+                    mutual_block: true
+                    you_blocked_them: true
+                    they_blocked_you: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /me/blocked:
+    get:
+      tags:
+        - Moderation
+      summary: List blocked users
+      description: Get a paginated list of users you have blocked
+      operationId: getBlockedUsers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number for pagination
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sort
+          in: query
+          description: Sort order
+          schema:
+            type: string
+            enum: [created_at_desc, created_at_asc]
+            default: created_at_desc
+      responses:
+        '200':
+          description: Blocked users retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockedUsersResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /me/reports:
+    get:
+      tags:
+        - Moderation
+      summary: List user's reports
+      description: Get a paginated list of reports you have submitted
+      operationId: getUserReports
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number for pagination
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          description: Filter by report status
+          schema:
+            type: string
+            enum: [pending, under_review, resolved, rejected]
+        - name: sort
+          in: query
+          description: Sort order
+          schema:
+            type: string
+            enum: [created_at_desc, created_at_asc, updated_at_desc, updated_at_asc]
+            default: created_at_desc
+      responses:
+        '200':
+          description: User reports retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserReportsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /reports/{reportId}:
+    get:
+      tags:
+        - Moderation
+      summary: Get report details
+      description: Get details of a specific report you submitted
+      operationId: getReportDetails
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          description: ID of the report
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+      responses:
+        '200':
+          description: Report details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportDetailsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Moderation
+      summary: Cancel report
+      description: Cancel a pending report you submitted
+      operationId: cancelReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          description: ID of the report to cancel
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+      responses:
+        '200':
+          description: Report cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelReportResponse'
+              example:
+                message: "Report cancelled successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Report cannot be cancelled (already processed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Report cannot be cancelled"
+                message: "Report is already being processed"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # Admin endpoints
+  /admin/reports:
+    get:
+      tags:
+        - Admin Moderation
+      summary: List all reports (Admin)
+      description: |
+        Get a paginated list of all reports in the system.
+        Requires admin privileges.
+      operationId: adminGetReports
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number for pagination
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          description: Filter by report status
+          schema:
+            type: string
+            enum: [pending, under_review, resolved, rejected]
+        - name: priority
+          in: query
+          description: Filter by priority level
+          schema:
+            type: string
+            enum: [low, medium, high, critical]
+        - name: reason
+          in: query
+          description: Filter by report reason
+          schema:
+            type: string
+            enum: [inappropriate_behavior, fake_profile, spam, harassment, inappropriate_content, other]
+        - name: sort
+          in: query
+          description: Sort order
+          schema:
+            type: string
+            enum: [created_at_desc, created_at_asc, priority_desc, priority_asc, updated_at_desc, updated_at_asc]
+            default: created_at_desc
+      responses:
+        '200':
+          description: Reports retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminReportsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/reports/{reportId}:
+    get:
+      tags:
+        - Admin Moderation
+      summary: Get report details (Admin)
+      description: |
+        Get detailed information about a specific report.
+        Requires admin privileges.
+      operationId: adminGetReportDetails
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          description: ID of the report
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+      responses:
+        '200':
+          description: Report details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminReportDetailsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/reports/{reportId}/review:
+    post:
+      tags:
+        - Admin Moderation
+      summary: Review and resolve report (Admin)
+      description: |
+        Review a report and take appropriate action.
+        Requires admin privileges.
+        
+        **Rate Limit:** 20 requests per minute, 500 per hour
+      operationId: adminReviewReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          description: ID of the report to review
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewReportRequest'
+            examples:
+              approve_ban:
+                summary: Approve report and ban user
+                value:
+                  action: "ban"
+                  reason: "Multiple violations of community guidelines"
+                  duration: "30d"
+                  notify_reporter: true
+                  notify_reported: true
+                  admin_notes: "User has multiple reports for harassment"
+              reject_report:
+                summary: Reject report
+                value:
+                  action: "reject"
+                  reason: "Insufficient evidence"
+                  notify_reporter: true
+                  admin_notes: "No clear violation found"
+      responses:
+        '200':
+          description: Report reviewed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewReportResponse'
+              examples:
+                ban_issued:
+                  summary: User banned
+                  value:
+                    report_id: "550e8400-e29b-41d4-a716-446655440001"
+                    action_taken: "ban"
+                    ban_id: "550e8400-e29b-41d4-a716-446655440003"
+                    message: "User banned successfully"
+                report_rejected:
+                  summary: Report rejected
+                  value:
+                    report_id: "550e8400-e29b-41d4-a716-446655440001"
+                    action_taken: "reject"
+                    message: "Report rejected"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Report already reviewed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Report already reviewed"
+                message: "This report has already been reviewed"
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{userId}/ban:
+    post:
+      tags:
+        - Admin Moderation
+      summary: Ban user (Admin)
+      description: |
+        Ban a user for violating community guidelines.
+        Requires admin privileges.
+        
+        **Rate Limit:** 20 requests per minute, 500 per hour
+      operationId: adminBanUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: ID of the user to ban
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BanUserRequest'
+            examples:
+              temporary_ban:
+                summary: Temporary ban
+                value:
+                  reason: "Harassment and inappropriate behavior"
+                  duration: "30d"
+                  notify_user: true
+                  admin_notes: "Multiple reports of harassment"
+              permanent_ban:
+                summary: Permanent ban
+                value:
+                  reason: "Severe violation of community guidelines"
+                  permanent: true
+                  notify_user: true
+                  admin_notes: "Creating fake profiles and scamming"
+      responses:
+        '201':
+          description: User banned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BanUserResponse'
+              example:
+                ban_id: "550e8400-e29b-41d4-a716-446655440003"
+                user_id: "550e8400-e29b-41d4-a716-446655440000"
+                action_type: "ban"
+                reason: "Harassment and inappropriate behavior"
+                duration: "30d"
+                expires_at: "2025-01-31T12:00:00Z"
+                created_at: "2025-01-01T12:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: User already banned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "User already banned"
+                message: "This user is already banned"
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{userId}/suspend:
+    post:
+      tags:
+        - Admin Moderation
+      summary: Suspend user (Admin)
+      description: |
+        Suspend a user temporarily for violating community guidelines.
+        Requires admin privileges.
+        
+        **Rate Limit:** 20 requests per minute, 500 per hour
+      operationId: adminSuspendUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: ID of the user to suspend
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuspendUserRequest'
+            example:
+              reason: "Minor violation of community guidelines"
+              duration: "7d"
+              notify_user: true
+              admin_notes: "First offense - educational suspension"
+      responses:
+        '201':
+          description: User suspended successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuspendUserResponse'
+              example:
+                ban_id: "550e8400-e29b-41d4-a716-446655440004"
+                user_id: "550e8400-e29b-41d4-a716-446655440000"
+                action_type: "suspend"
+                reason: "Minor violation of community guidelines"
+                duration: "7d"
+                expires_at: "2025-01-08T12:00:00Z"
+                created_at: "2025-01-01T12:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: User already suspended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "User already suspended"
+                message: "This user is already suspended"
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{userId}/bans:
+    get:
+      tags:
+        - Admin Moderation
+      summary: Get user ban history (Admin)
+      description: |
+        Get the ban and suspension history for a specific user.
+        Requires admin privileges.
+      operationId: adminGetBanHistory
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: ID of the user
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        - name: page
+          in: query
+          description: Page number for pagination
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: action_type
+          in: query
+          description: Filter by action type
+          schema:
+            type: string
+            enum: [ban, suspend]
+        - name: is_active
+          in: query
+          description: Filter by active status
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Ban history retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BanHistoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/users/{userId}/appeals:
+    get:
+      tags:
+        - Admin Moderation
+      summary: Get user appeal history (Admin)
+      description: |
+        Get the appeal history for a specific user.
+        Requires admin privileges.
+      operationId: adminGetAppealHistory
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: ID of the user
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        - name: page
+          in: query
+          description: Page number for pagination
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          description: Filter by appeal status
+          schema:
+            type: string
+            enum: [pending, under_review, approved, rejected]
+      responses:
+        '200':
+          description: Appeal history retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppealHistoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/appeals/{appealId}/review:
+    post:
+      tags:
+        - Admin Moderation
+      summary: Review appeal (Admin)
+      description: |
+        Review and make a decision on a user appeal.
+        Requires admin privileges.
+        
+        **Rate Limit:** 20 requests per minute, 500 per hour
+      operationId: adminReviewAppeal
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: appealId
+          in: path
+          required: true
+          description: ID of the appeal to review
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440005"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewAppealRequest'
+            examples:
+              approve_appeal:
+                summary: Approve appeal
+                value:
+                  decision: "approved"
+                  reason: "Insufficient evidence for original ban"
+                  action: "lift_ban"
+                  notify_user: true
+                  admin_notes: "User provided compelling evidence"
+              reject_appeal:
+                summary: Reject appeal
+                value:
+                  decision: "rejected"
+                  reason: "Original ban was justified"
+                  notify_user: true
+                  admin_notes: "User failed to provide sufficient evidence"
+      responses:
+        '200':
+          description: Appeal reviewed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewAppealResponse'
+              examples:
+                appeal_approved:
+                  summary: Appeal approved
+                  value:
+                    appeal_id: "550e8400-e29b-41d4-a716-446655440005"
+                    decision: "approved"
+                    action_taken: "lift_ban"
+                    message: "Appeal approved - ban lifted"
+                appeal_rejected:
+                  summary: Appeal rejected
+                  value:
+                    appeal_id: "550e8400-e29b-41d4-a716-446655440005"
+                    decision: "rejected"
+                    message: "Appeal rejected - original ban upheld"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Appeal already reviewed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Appeal already reviewed"
+                message: "This appeal has already been reviewed"
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/moderation-queue:
+    get:
+      tags:
+        - Admin Moderation
+      summary: Get moderation queue (Admin)
+      description: |
+        Get items in the moderation queue that need attention.
+        Requires admin privileges.
+      operationId: adminGetModerationQueue
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number for pagination
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: priority
+          in: query
+          description: Filter by priority level
+          schema:
+            type: string
+            enum: [low, medium, high, critical]
+        - name: item_type
+          in: query
+          description: Filter by item type
+          schema:
+            type: string
+            enum: [report, content_analysis, appeal]
+        - name: assigned_to
+          in: query
+          description: Filter by assigned moderator
+          schema:
+            type: string
+            format: uuid
+        - name: sort
+          in: query
+          description: Sort order
+          schema:
+            type: string
+            enum: [priority_desc, priority_asc, created_at_desc, created_at_asc, due_date_asc, due_date_desc]
+            default: priority_desc
+      responses:
+        '200':
+          description: Moderation queue retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModerationQueueResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /admin/analytics:
+    get:
+      tags:
+        - Admin Moderation
+      summary: Get moderation analytics (Admin)
+      description: |
+        Get comprehensive analytics about moderation activities.
+        Requires admin privileges.
+      operationId: adminGetModerationAnalytics
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          description: Time period for analytics
+          schema:
+            type: string
+            enum: [24h, 7d, 30d, 90d, 1y]
+            default: "30d"
+        - name: metrics
+          in: query
+          description: Specific metrics to include
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [reports, bans, appeals, content, moderators, system]
+            default: ["reports", "bans", "appeals"]
+        - name: group_by
+          in: query
+          description: Group analytics by
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: "day"
+      responses:
+        '200':
+          description: Analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModerationAnalyticsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ReportRequest:
+      type: object
+      required:
+        - reported_user_id
+        - reason
+      properties:
+        reported_user_id:
+          type: string
+          format: uuid
+          description: ID of the user being reported
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        reason:
+          type: string
+          enum: [inappropriate_behavior, fake_profile, spam, harassment, inappropriate_content, other]
+          description: Reason for the report
+          example: "inappropriate_behavior"
+        description:
+          type: string
+          maxLength: 1000
+          description: Detailed description of the issue
+          example: "User sending harassing messages and inappropriate content"
+        content_type:
+          type: string
+          enum: [photo, message, profile, video]
+          description: Type of content being reported (if applicable)
+          example: "photo"
+        content_id:
+          type: string
+          description: ID of the specific content being reported (if applicable)
+          example: "photo_123456"
+        evidence:
+          type: string
+          description: Additional evidence or context
+          example: "Screenshots of conversation attached"
+
+    ReportResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: ID of the created report
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        status:
+          type: string
+          enum: [pending, under_review, resolved, rejected]
+          description: Current status of the report
+          example: "pending"
+        created_at:
+          type: string
+          format: date-time
+          description: When the report was created
+          example: "2025-01-01T12:00:00Z"
+
+    BlockRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          description: Reason for blocking the user
+          example: "Harassment and inappropriate messages"
+
+    BlockResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: ID of the block record
+          example: "550e8400-e29b-41d4-a716-446655440002"
+        blocker_id:
+          type: string
+          format: uuid
+          description: ID of the user who initiated the block
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        blocked_id:
+          type: string
+          format: uuid
+          description: ID of the user who was blocked
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        created_at:
+          type: string
+          format: date-time
+          description: When the block was created
+          example: "2025-01-01T12:00:00Z"
+
+    UnblockResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Success message
+          example: "User unblocked successfully"
+
+    BlockStatusResponse:
+      type: object
+      properties:
+        blocked:
+          type: boolean
+          description: Whether a block exists
+          example: true
+        blocked_by:
+          type: string
+          enum: [you, them]
+          nullable: true
+          description: Who initiated the block
+          example: "you"
+        blocked_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the block was created
+          example: "2025-01-01T12:00:00Z"
+
+    MutualBlockResponse:
+      type: object
+      properties:
+        mutual_block:
+          type: boolean
+          description: Whether there is a mutual block
+          example: true
+        you_blocked_them:
+          type: boolean
+          description: Whether you blocked them
+          example: true
+        they_blocked_you:
+          type: boolean
+          description: Whether they blocked you
+          example: true
+
+    BlockedUsersResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlockedUser'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    BlockedUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: ID of the block record
+          example: "550e8400-e29b-41d4-a716-446655440002"
+        blocked_user:
+          $ref: '#/components/schemas/UserSummary'
+        reason:
+          type: string
+          nullable: true
+          description: Reason for blocking
+          example: "Harassment and inappropriate messages"
+        created_at:
+          type: string
+          format: date-time
+          description: When the block was created
+          example: "2025-01-01T12:00:00Z"
+
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: User ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        username:
+          type: string
+          description: Username
+          example: "johndoe"
+        profile_photo:
+          type: string
+          nullable: true
+          description: URL of profile photo
+          example: "https://cdn.winkr.com/photos/user123.jpg"
+        age:
+          type: integer
+          description: User age
+          example: 28
+        location:
+          type: string
+          description: User location
+          example: "New York, NY"
+
+    UserReportsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserReport'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    UserReport:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Report ID
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        reported_user:
+          $ref: '#/components/schemas/UserSummary'
+        reason:
+          type: string
+          description: Report reason
+          example: "inappropriate_behavior"
+        description:
+          type: string
+          nullable: true
+          description: Report description
+          example: "User sending harassing messages"
+        status:
+          type: string
+          enum: [pending, under_review, resolved, rejected]
+          description: Report status
+          example: "pending"
+        created_at:
+          type: string
+          format: date-time
+          description: When the report was created
+          example: "2025-01-01T12:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: When the report was last updated
+          example: "2025-01-01T12:30:00Z"
+
+    ReportDetailsResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Report ID
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        reported_user:
+          $ref: '#/components/schemas/UserSummary'
+        reason:
+          type: string
+          description: Report reason
+          example: "inappropriate_behavior"
+        description:
+          type: string
+          nullable: true
+          description: Report description
+          example: "User sending harassing messages"
+        content_type:
+          type: string
+          nullable: true
+          description: Type of content reported
+          example: "photo"
+        content_id:
+          type: string
+          nullable: true
+          description: ID of content reported
+          example: "photo_123456"
+        evidence:
+          type: string
+          nullable: true
+          description: Additional evidence
+          example: "Screenshots attached"
+        status:
+          type: string
+          enum: [pending, under_review, resolved, rejected]
+          description: Report status
+          example: "pending"
+        ai_analysis:
+          $ref: '#/components/schemas/AIAnalysis'
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          description: When the report was created
+          example: "2025-01-01T12:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: When the report was last updated
+          example: "2025-01-01T12:30:00Z"
+
+    AIAnalysis:
+      type: object
+      properties:
+        confidence_score:
+          type: number
+          format: float
+          description: AI confidence score
+          example: 0.85
+        categories:
+          type: array
+          items:
+            type: string
+          description: Detected categories
+          example: ["harassment", "inappropriate_content"]
+        recommendation:
+          type: string
+          enum: [approve, reject, manual_review]
+          description: AI recommendation
+          example: "manual_review"
+        processed_at:
+          type: string
+          format: date-time
+          description: When AI analysis was completed
+          example: "2025-01-01T12:05:00Z"
+
+    CancelReportResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Success message
+          example: "Report cancelled successfully"
+
+    AdminReportsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminReport'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        summary:
+          $ref: '#/components/schemas/ReportsSummary'
+
+    AdminReport:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Report ID
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        reporter:
+          $ref: '#/components/schemas/UserSummary'
+        reported_user:
+          $ref: '#/components/schemas/UserSummary'
+        reason:
+          type: string
+          description: Report reason
+          example: "inappropriate_behavior"
+        description:
+          type: string
+          nullable: true
+          description: Report description
+          example: "User sending harassing messages"
+        content_type:
+          type: string
+          nullable: true
+          description: Type of content reported
+          example: "photo"
+        content_id:
+          type: string
+          nullable: true
+          description: ID of content reported
+          example: "photo_123456"
+        status:
+          type: string
+          enum: [pending, under_review, resolved, rejected]
+          description: Report status
+          example: "pending"
+        priority:
+          type: string
+          enum: [low, medium, high, critical]
+          description: Report priority
+          example: "medium"
+        ai_analysis:
+          $ref: '#/components/schemas/AIAnalysis'
+          nullable: true
+        assigned_to:
+          $ref: '#/components/schemas/UserSummary'
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          description: When the report was created
+          example: "2025-01-01T12:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: When the report was last updated
+          example: "2025-01-01T12:30:00Z"
+
+    ReportsSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total number of reports
+          example: 150
+        pending:
+          type: integer
+          description: Number of pending reports
+          example: 25
+        under_review:
+          type: integer
+          description: Number of reports under review
+          example: 15
+        resolved:
+          type: integer
+          description: Number of resolved reports
+          example: 95
+        rejected:
+          type: integer
+          description: Number of rejected reports
+          example: 15
+
+    AdminReportDetailsResponse:
+      allOf:
+        - $ref: '#/components/schemas/ReportDetailsResponse'
+        - type: object
+          properties:
+            reporter:
+              $ref: '#/components/schemas/UserSummary'
+            priority:
+              type: string
+              enum: [low, medium, high, critical]
+              description: Report priority
+              example: "medium"
+            assigned_to:
+              $ref: '#/components/schemas/UserSummary'
+              nullable: true
+            admin_notes:
+              type: string
+              nullable: true
+              description: Admin notes about the report
+              example: "User has multiple similar reports"
+            resolution:
+              $ref: '#/components/schemas/ReportResolution'
+              nullable: true
+
+    ReportResolution:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [ban, suspend, warn, reject, no_action]
+          description: Action taken
+          example: "ban"
+        reason:
+          type: string
+          description: Reason for action
+          example: "Multiple violations of community guidelines"
+        duration:
+          type: string
+          nullable: true
+          description: Duration of action (if applicable)
+          example: "30d"
+        resolved_by:
+          $ref: '#/components/schemas/UserSummary'
+        resolved_at:
+          type: string
+          format: date-time
+          description: When the report was resolved
+          example: "2025-01-01T14:00:00Z"
+
+    ReviewReportRequest:
+      type: object
+      required:
+        - action
+        - reason
+      properties:
+        action:
+          type: string
+          enum: [ban, suspend, warn, reject, no_action]
+          description: Action to take on the report
+          example: "ban"
+        reason:
+          type: string
+          maxLength: 1000
+          description: Reason for the action
+          example: "Multiple violations of community guidelines"
+        duration:
+          type: string
+          nullable: true
+          description: Duration for ban/suspend (e.g., "7d", "30d", "permanent")
+          example: "30d"
+        notify_reporter:
+          type: boolean
+          description: Whether to notify the reporter
+          example: true
+        notify_reported:
+          type: boolean
+          description: Whether to notify the reported user
+          example: true
+        admin_notes:
+          type: string
+          maxLength: 2000
+          description: Internal admin notes
+          example: "User has multiple reports for harassment"
+
+    ReviewReportResponse:
+      type: object
+      properties:
+        report_id:
+          type: string
+          format: uuid
+          description: ID of the reviewed report
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        action_taken:
+          type: string
+          description: Action that was taken
+          example: "ban"
+        ban_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: ID of created ban (if applicable)
+          example: "550e8400-e29b-41d4-a716-446655440003"
+        message:
+          type: string
+          description: Success message
+          example: "User banned successfully"
+
+    BanUserRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          maxLength: 1000
+          description: Reason for the ban
+          example: "Harassment and inappropriate behavior"
+        duration:
+          type: string
+          nullable: true
+          description: Duration of the ban (e.g., "7d", "30d", "permanent")
+          example: "30d"
+        permanent:
+          type: boolean
+          description: Whether this is a permanent ban
+          example: false
+        notify_user:
+          type: boolean
+          description: Whether to notify the user
+          example: true
+        admin_notes:
+          type: string
+          maxLength: 2000
+          description: Internal admin notes
+          example: "Multiple reports of harassment"
+
+    BanUserResponse:
+      type: object
+      properties:
+        ban_id:
+          type: string
+          format: uuid
+          description: ID of the ban
+          example: "550e8400-e29b-41d4-a716-446655440003"
+        user_id:
+          type: string
+          format: uuid
+          description: ID of the banned user
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        action_type:
+          type: string
+          enum: [ban, suspend]
+          description: Type of action
+          example: "ban"
+        reason:
+          type: string
+          description: Reason for the ban
+          example: "Harassment and inappropriate behavior"
+        duration:
+          type: string
+          nullable: true
+          description: Duration of the ban
+          example: "30d"
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the ban expires
+          example: "2025-01-31T12:00:00Z"
+        created_at:
+          type: string
+          format: date-time
+          description: When the ban was created
+          example: "2025-01-01T12:00:00Z"
+
+    SuspendUserRequest:
+      type: object
+      required:
+        - reason
+        - duration
+      properties:
+        reason:
+          type: string
+          maxLength: 1000
+          description: Reason for the suspension
+          example: "Minor violation of community guidelines"
+        duration:
+          type: string
+          description: Duration of the suspension (e.g., "7d", "30d")
+          example: "7d"
+        notify_user:
+          type: boolean
+          description: Whether to notify the user
+          example: true
+        admin_notes:
+          type: string
+          maxLength: 2000
+          description: Internal admin notes
+          example: "First offense - educational suspension"
+
+    SuspendUserResponse:
+      type: object
+      properties:
+        ban_id:
+          type: string
+          format: uuid
+          description: ID of the suspension
+          example: "550e8400-e29b-41d4-a716-446655440004"
+        user_id:
+          type: string
+          format: uuid
+          description: ID of the suspended user
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        action_type:
+          type: string
+          enum: [ban, suspend]
+          description: Type of action
+          example: "suspend"
+        reason:
+          type: string
+          description: Reason for the suspension
+          example: "Minor violation of community guidelines"
+        duration:
+          type: string
+          description: Duration of the suspension
+          example: "7d"
+        expires_at:
+          type: string
+          format: date-time
+          description: When the suspension expires
+          example: "2025-01-08T12:00:00Z"
+        created_at:
+          type: string
+          format: date-time
+          description: When the suspension was created
+          example: "2025-01-01T12:00:00Z"
+
+    BanHistoryResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/BanRecord'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        summary:
+          $ref: '#/components/schemas/BanSummary'
+
+    BanRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Ban ID
+          example: "550e8400-e29b-41d4-a716-446655440003"
+        action_type:
+          type: string
+          enum: [ban, suspend]
+          description: Type of action
+          example: "ban"
+        reason:
+          type: string
+          description: Reason for the action
+          example: "Harassment and inappropriate behavior"
+        duration:
+          type: string
+          nullable: true
+          description: Duration of the action
+          example: "30d"
+        is_active:
+          type: boolean
+          description: Whether the action is currently active
+          example: false
+        is_permanent:
+          type: boolean
+          description: Whether this is a permanent ban
+          example: false
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the action expires
+          example: "2025-01-31T12:00:00Z"
+        banner:
+          $ref: '#/components/schemas/UserSummary'
+        created_at:
+          type: string
+          format: date-time
+          description: When the action was created
+          example: "2025-01-01T12:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: When the action was last updated
+          example: "2025-01-01T12:00:00Z"
+
+    BanSummary:
+      type: object
+      properties:
+        total_actions:
+          type: integer
+          description: Total number of actions
+          example: 5
+        active_bans:
+          type: integer
+          description: Number of active bans
+          example: 1
+        active_suspensions:
+          type: integer
+          description: Number of active suspensions
+          example: 0
+        permanent_bans:
+          type: integer
+          description: Number of permanent bans
+          example: 1
+
+    AppealHistoryResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppealRecord'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        summary:
+          $ref: '#/components/schemas/AppealSummary'
+
+    AppealRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Appeal ID
+          example: "550e8400-e29b-41d4-a716-446655440005"
+        ban_id:
+          type: string
+          format: uuid
+          description: ID of the related ban
+          example: "550e8400-e29b-41d4-a716-446655440003"
+        reason:
+          type: string
+          description: Reason for appeal
+          example: "I believe the ban was unjustified"
+        description:
+          type: string
+          description: Detailed appeal description
+          example: "I was not harassing anyone and have evidence to prove it"
+        status:
+          type: string
+          enum: [pending, under_review, approved, rejected]
+          description: Appeal status
+          example: "pending"
+        decision:
+          type: string
+          nullable: true
+          enum: [approved, rejected]
+          description: Appeal decision
+        decision_reason:
+          type: string
+          nullable: true
+          description: Reason for decision
+        reviewed_by:
+          $ref: '#/components/schemas/UserSummary'
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          description: When the appeal was created
+          example: "2025-01-02T10:00:00Z"
+        reviewed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the appeal was reviewed
+          example: "2025-01-03T15:00:00Z"
+
+    AppealSummary:
+      type: object
+      properties:
+        total_appeals:
+          type: integer
+          description: Total number of appeals
+          example: 3
+        pending_appeals:
+          type: integer
+          description: Number of pending appeals
+          example: 1
+        approved_appeals:
+          type: integer
+          description: Number of approved appeals
+          example: 1
+        rejected_appeals:
+          type: integer
+          description: Number of rejected appeals
+          example: 1
+
+    ReviewAppealRequest:
+      type: object
+      required:
+        - decision
+        - reason
+      properties:
+        decision:
+          type: string
+          enum: [approved, rejected]
+          description: Decision on the appeal
+          example: "approved"
+        reason:
+          type: string
+          maxLength: 1000
+          description: Reason for the decision
+          example: "Insufficient evidence for original ban"
+        action:
+          type: string
+          enum: [lift_ban, modify_ban, uphold_ban]
+          description: Action to take based on decision
+          example: "lift_ban"
+        new_duration:
+          type: string
+          nullable: true
+          description: New duration if modifying ban
+          example: "7d"
+        notify_user:
+          type: boolean
+          description: Whether to notify the user
+          example: true
+        admin_notes:
+          type: string
+          maxLength: 2000
+          description: Internal admin notes
+          example: "User provided compelling evidence"
+
+    ReviewAppealResponse:
+      type: object
+      properties:
+        appeal_id:
+          type: string
+          format: uuid
+          description: ID of the reviewed appeal
+          example: "550e8400-e29b-41d4-a716-446655440005"
+        decision:
+          type: string
+          description: Decision made
+          example: "approved"
+        action_taken:
+          type: string
+          description: Action taken based on decision
+          example: "lift_ban"
+        message:
+          type: string
+          description: Success message
+          example: "Appeal approved - ban lifted"
+
+    ModerationQueueResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueueItem'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        summary:
+          $ref: '#/components/schemas/QueueSummary'
+
+    QueueItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Queue item ID
+          example: "550e8400-e29b-41d4-a716-446655440006"
+        item_type:
+          type: string
+          enum: [report, content_analysis, appeal]
+          description: Type of item
+          example: "report"
+        item_id:
+          type: string
+          format: uuid
+          description: ID of the related item
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        priority:
+          type: string
+          enum: [low, medium, high, critical]
+          description: Priority level
+          example: "medium"
+        title:
+          type: string
+          description: Item title/summary
+          example: "Report: Inappropriate behavior"
+        assigned_to:
+          $ref: '#/components/schemas/UserSummary'
+          nullable: true
+        due_date:
+          type: string
+          format: date-time
+          nullable: true
+          description: Due date for review
+          example: "2025-01-02T12:00:00Z"
+        created_at:
+          type: string
+          format: date-time
+          description: When the item was added to queue
+          example: "2025-01-01T12:00:00Z"
+
+    QueueSummary:
+      type: object
+      properties:
+        total_items:
+          type: integer
+          description: Total items in queue
+          example: 45
+        unassigned_items:
+          type: integer
+          description: Unassigned items
+          example: 20
+        overdue_items:
+          type: integer
+          description: Overdue items
+          example: 3
+        critical_priority:
+          type: integer
+          description: Critical priority items
+          example: 2
+        high_priority:
+          type: integer
+          description: High priority items
+          example: 8
+        medium_priority:
+          type: integer
+          description: Medium priority items
+          example: 25
+        low_priority:
+          type: integer
+          description: Low priority items
+          example: 10
+
+    ModerationAnalyticsResponse:
+      type: object
+      properties:
+        period:
+          type: string
+          description: Analytics period
+          example: "30d"
+        generated_at:
+          type: string
+          format: date-time
+          description: When analytics were generated
+          example: "2025-01-01T12:00:00Z"
+        reports:
+          $ref: '#/components/schemas/ReportsAnalytics'
+          nullable: true
+        bans:
+          $ref: '#/components/schemas/BansAnalytics'
+          nullable: true
+        appeals:
+          $ref: '#/components/schemas/AppealsAnalytics'
+          nullable: true
+        content:
+          $ref: '#/components/schemas/ContentAnalytics'
+          nullable: true
+        moderators:
+          $ref: '#/components/schemas/ModeratorsAnalytics'
+          nullable: true
+        system:
+          $ref: '#/components/schemas/SystemAnalytics'
+          nullable: true
+
+    ReportsAnalytics:
+      type: object
+      properties:
+        total_reports:
+          type: integer
+          description: Total number of reports
+          example: 1250
+        reports_by_reason:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Reports broken down by reason
+          example:
+            inappropriate_behavior: 450
+            fake_profile: 300
+            spam: 200
+            harassment: 250
+            inappropriate_content: 50
+        reports_by_status:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Reports broken down by status
+          example:
+            pending: 45
+            under_review: 25
+            resolved: 1100
+            rejected: 80
+        average_resolution_time:
+          type: number
+          description: Average resolution time in hours
+          example: 4.5
+        trends:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendData'
+
+    BansAnalytics:
+      type: object
+      properties:
+        total_bans:
+          type: integer
+          description: Total number of bans
+          example: 150
+        total_suspensions:
+          type: integer
+          description: Total number of suspensions
+          example: 75
+        bans_by_reason:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Bans broken down by reason
+          example:
+            harassment: 60
+            spam: 40
+            fake_profile: 30
+            inappropriate_content: 20
+        bans_by_duration:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Bans broken down by duration
+          example:
+            "7d": 40
+            "30d": 60
+            "permanent": 50
+        active_bans:
+          type: integer
+          description: Currently active bans
+          example: 85
+        ban_reversal_rate:
+          type: number
+          description: Percentage of bans reversed on appeal
+          example: 0.15
+
+    AppealsAnalytics:
+      type: object
+      properties:
+        total_appeals:
+          type: integer
+          description: Total number of appeals
+          example: 85
+        appeals_by_status:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Appeals broken down by status
+          example:
+            pending: 15
+            under_review: 10
+            approved: 35
+            rejected: 25
+        approval_rate:
+          type: number
+          description: Percentage of appeals approved
+          example: 0.41
+        average_review_time:
+          type: number
+          description: Average review time in hours
+          example: 12.5
+
+    ContentAnalytics:
+      type: object
+      properties:
+        total_content_analyzed:
+          type: integer
+          description: Total content items analyzed
+          example: 50000
+        violations_detected:
+          type: integer
+          description: Number of violations detected
+          example: 1250
+        violation_rate:
+          type: number
+          description: Percentage of content with violations
+          example: 0.025
+        violations_by_type:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Violations broken down by type
+          example:
+            nsfw: 500
+            violence: 200
+            harassment: 300
+            spam: 250
+        ai_accuracy:
+          type: number
+          description: AI detection accuracy rate
+          example: 0.92
+
+    ModeratorsAnalytics:
+      type: object
+      properties:
+        active_moderators:
+          type: integer
+          description: Number of active moderators
+          example: 12
+        reports_reviewed:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Reports reviewed by each moderator
+          example:
+            "mod1": 150
+            "mod2": 120
+            "mod3": 180
+        average_review_time:
+          type: number
+          description: Average review time per moderator
+          example: 3.2
+        top_performers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModeratorPerformance'
+
+    ModeratorPerformance:
+      type: object
+      properties:
+        moderator_id:
+          type: string
+          format: uuid
+          description: Moderator ID
+          example: "550e8400-e29b-41d4-a716-446655440007"
+        username:
+          type: string
+          description: Moderator username
+          example: "moderator1"
+        reports_reviewed:
+          type: integer
+          description: Number of reports reviewed
+          example: 150
+        average_review_time:
+          type: number
+          description: Average review time in hours
+          example: 2.8
+        accuracy_rate:
+          type: number
+          description: Accuracy rate of decisions
+          example: 0.95
+
+    SystemAnalytics:
+      type: object
+      properties:
+        ai_processing_time:
+          type: number
+          description: Average AI processing time in seconds
+          example: 1.2
+        queue_processing_rate:
+          type: number
+          description: Queue items processed per hour
+          example: 15.5
+        system_uptime:
+          type: number
+          description: System uptime percentage
+          example: 0.998
+        error_rate:
+          type: number
+          description: System error rate
+          example: 0.002
+
+    TrendData:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          description: Date
+          example: "2025-01-01"
+        value:
+          type: number
+          description: Value for this date
+          example: 45
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Current page number
+          example: 1
+        limit:
+          type: integer
+          description: Items per page
+          example: 20
+        total:
+          type: integer
+          description: Total number of items
+          example: 150
+        total_pages:
+          type: integer
+          description: Total number of pages
+          example: 8
+        has_next:
+          type: boolean
+          description: Whether there are more pages
+          example: true
+        has_prev:
+          type: boolean
+          description: Whether there are previous pages
+          example: false
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error type
+          example: "validation_error"
+        message:
+          type: string
+          description: Error message
+          example: "Invalid request parameters"
+        details:
+          type: object
+          nullable: true
+          description: Additional error details
+          example:
+            field: "reason"
+            issue: "Invalid reason value"
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "bad_request"
+            message: "Invalid request parameters"
+            details:
+              field: "reason"
+              issue: "Invalid reason value"
+
+    Unauthorized:
+      description: Unauthorized - invalid or missing authentication
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "unauthorized"
+            message: "Invalid or missing authentication token"
+
+    Forbidden:
+      description: Forbidden - insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "forbidden"
+            message: "Insufficient permissions to access this resource"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "not_found"
+            message: "Requested resource not found"
+
+    TooManyRequests:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "rate_limit_exceeded"
+            message: "Too many requests - please try again later"
+            details:
+              retry_after: 60
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "internal_server_error"
+            message: "An unexpected error occurred"
+
+tags:
+  - name: Moderation
+    description: User-facing moderation endpoints
+  - name: Admin Moderation
+    description: Administrative moderation endpoints (requires admin privileges)

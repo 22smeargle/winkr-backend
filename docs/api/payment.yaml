@@ -1,0 +1,1307 @@
+openapi: 3.0.3
+info:
+  title: WinKr Dating App - Payment API
+  description: |
+    Comprehensive payment and subscription management system powered by Stripe.
+    
+    ## Features
+    - Flexible subscription plans with trials and promotions
+    - Multiple payment methods support
+    - Automated billing and invoicing
+    - Webhook integration for real-time payment events
+    - Comprehensive payment history and analytics
+    - Refund management
+    - Proration support for plan changes
+    
+    ## Security
+    - PCI DSS compliant payment processing through Stripe
+    - Secure payment method storage
+    - Webhook signature verification
+    - Fraud detection and prevention
+    - Encrypted sensitive data transmission
+    
+    ## Rate Limiting
+    Payment endpoints have specific rate limits to prevent abuse:
+    - Subscription operations: 5 per minute, 50 per hour
+    - Payment method operations: 10 per minute, 100 per hour
+    - History/invoice requests: 20 per minute, 500 per hour
+    - Webhook processing: 1000 per minute (for Stripe events)
+    
+    ## Authentication
+    All endpoints require JWT authentication. Webhook endpoints use Stripe signature verification.
+  version: 1.0.0
+  contact:
+    name: WinKr API Support
+    email: api-support@winkr.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.winkr.com/v1
+    description: Production server
+  - url: https://staging-api.winkr.com/v1
+    description: Staging server
+  - url: http://localhost:8080/v1
+    description: Development server
+
+tags:
+  - name: Payment
+    description: Payment and subscription management
+  - name: Plans
+    description: Subscription plans
+  - name: Webhooks
+    description: Stripe webhook handling
+
+paths:
+  /plans:
+    get:
+      tags:
+        - Plans
+      summary: Get available subscription plans
+      description: |
+        Retrieve all available subscription plans with pricing, features, and trial information.
+        This endpoint returns both active and inactive plans for reference purposes.
+        
+        **Use Cases:**
+        - Display available plans to users
+        - Compare plan features and pricing
+        - Check for promotional offers
+        - Validate plan availability
+        
+        **Rate Limit:** 20 requests per minute, 200 per hour
+      operationId: getPlans
+      parameters:
+        - name: active_only
+          in: query
+          description: Filter to show only active plans
+          schema:
+            type: boolean
+            default: true
+        - name: currency
+          in: query
+          description: Filter by currency
+          schema:
+            type: string
+            enum: [usd, eur, gbp]
+            default: usd
+      responses:
+        '200':
+          description: Plans retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SubscriptionPlan'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /subscribe:
+    post:
+      tags:
+        - Payment
+      summary: Create a new subscription
+      description: Subscribe to a plan with the specified payment method
+      operationId: createSubscription
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - planId
+                - paymentMethodId
+              properties:
+                planId:
+                  type: string
+                  description: Stripe price ID for the plan
+                  example: price_1O2x3a2eZvKYlo2C5Zl3xY2a
+                paymentMethodId:
+                  type: string
+                  description: Stripe payment method ID
+                  example: pm_1O2x3a2eZvKYlo2C5Zl3xY2a
+                trialPeriodDays:
+                  type: integer
+                  description: Number of days for trial period (optional)
+                  example: 7
+                promotionCode:
+                  type: string
+                  description: Promotion code for discount (optional)
+                  example: SAVE20
+      responses:
+        '201':
+          description: Subscription created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Subscription'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          description: Payment required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: User already has an active subscription
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /me/subscription:
+    get:
+      tags:
+        - Payment
+      summary: Get current subscription
+      description: Retrieve the current user's subscription details
+      operationId: getCurrentSubscription
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Subscription retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Subscription'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No active subscription found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /subscription/cancel:
+    post:
+      tags:
+        - Payment
+      summary: Cancel subscription
+      description: Cancel the current user's subscription
+      operationId: cancelSubscription
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cancelAtPeriodEnd:
+                  type: boolean
+                  description: Cancel at the end of the current billing period
+                  example: true
+                reason:
+                  type: string
+                  description: Reason for cancellation
+                  example: "Found a better alternative"
+      responses:
+        '200':
+          description: Subscription cancelled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Subscription'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No active subscription found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /subscription/update:
+    put:
+      tags:
+        - Payment
+      summary: Update subscription
+      description: Update the current subscription (change plan, payment method, etc.)
+      operationId: updateSubscription
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                planId:
+                  type: string
+                  description: New plan ID (for plan changes)
+                  example: price_1O2x3a2eZvKYlo2C5Zl3xY2a
+                paymentMethodId:
+                  type: string
+                  description: New payment method ID
+                  example: pm_1O2x3a2eZvKYlo2C5Zl3xY2a
+                prorationBehavior:
+                  type: string
+                  enum: [create_prorations, none]
+                  description: How to handle proration for plan changes
+                  example: create_prorations
+      responses:
+        '200':
+          description: Subscription updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Subscription'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No active subscription found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /subscription/reactivate:
+    post:
+      tags:
+        - Payment
+      summary: Reactivate subscription
+      description: |
+        Reactivate a cancelled subscription within the grace period. This endpoint
+        allows users to restore their subscription without losing data or settings.
+        
+        **Reactivation Conditions:**
+        - Subscription must be within grace period (typically 30 days)
+        - Original payment method must still be valid
+        - No outstanding balance or payment issues
+        
+        **Benefits of Reactivation:**
+        - Preserve all user data and preferences
+        - Maintain match history and conversations
+        - No need to reconfigure settings
+        - Immediate access to premium features
+        
+        **Rate Limit:** 5 requests per minute, 50 per hour
+      operationId: reactivateSubscription
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                paymentMethodId:
+                  type: string
+                  description: New payment method ID if original is invalid
+                  example: pm_1O2x3a2eZvKYlo2C5Zl3xY2a
+                retainBillingDate:
+                  type: boolean
+                  description: Keep original billing date
+                  default: true
+                  example: true
+      responses:
+        '200':
+          description: Subscription reactivated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Subscription'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No cancelled subscription found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payment/methods:
+    get:
+      tags:
+        - Payment
+      summary: Get payment methods
+      description: |
+        Retrieve all payment methods for the current user including cards, bank accounts,
+        and other supported payment types. Sensitive information is masked for security.
+        
+        **Security Features:**
+        - Card numbers are masked (showing only last 4 digits)
+        - Full payment details never exposed
+        - PCI DSS compliant data handling
+        - Secure storage through Stripe
+        
+        **Rate Limit:** 20 requests per minute, 500 per hour
+      operationId: getPaymentMethods
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          description: Filter by payment method type
+          schema:
+            type: string
+            enum: [card, sepa_debit, us_bank_account, all]
+            default: all
+      responses:
+        '200':
+          description: Payment methods retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PaymentMethod'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Payment
+      summary: Add payment method
+      description: |
+        Add a new payment method for the current user. Payment methods are securely
+        stored through Stripe and can be used for subscriptions and one-time payments.
+        
+        **Supported Payment Methods:**
+        - Credit/Debit Cards (Visa, Mastercard, Amex, Discover)
+        - SEPA Direct Debit (European accounts)
+        - US Bank Accounts (ACH)
+        - Apple Pay and Google Pay (via Stripe)
+        
+        **Security Measures:**
+        - 3D Secure authentication when required
+        - Address verification for cards
+        - Fraud detection and risk assessment
+        - PCI DSS compliant processing
+        
+        **Rate Limit:** 10 requests per minute, 100 per hour
+      operationId: addPaymentMethod
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - paymentMethodId
+              properties:
+                paymentMethodId:
+                  type: string
+                  description: Stripe payment method ID
+                  example: pm_1O2x3a2eZvKYlo2C5Zl3xY2a
+                isDefault:
+                  type: boolean
+                  description: Set as default payment method
+                  example: false
+      responses:
+        '201':
+          description: Payment method added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/PaymentMethod'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payment/methods/{methodId}:
+    delete:
+      tags:
+        - Payment
+      summary: Remove payment method
+      description: Remove a payment method for the current user
+      operationId: removePaymentMethod
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: methodId
+          in: path
+          required: true
+          description: Payment method ID
+          schema:
+            type: string
+            example: pm_1O2x3a2eZvKYlo2C5Zl3xY2a
+      responses:
+        '200':
+          description: Payment method removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Payment method removed successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Payment method not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payment/methods/{methodId}/default:
+    put:
+      tags:
+        - Payment
+      summary: Set default payment method
+      description: Set a payment method as the default for the current user
+      operationId: setDefaultPaymentMethod
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: methodId
+          in: path
+          required: true
+          description: Payment method ID
+          schema:
+            type: string
+            example: pm_1O2x3a2eZvKYlo2C5Zl3xY2a
+      responses:
+        '200':
+          description: Default payment method updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/PaymentMethod'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Payment method not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payment/webhook:
+    post:
+      tags:
+        - Webhooks
+      summary: Stripe webhook handler
+      description: |
+        Process webhook events from Stripe for real-time payment notifications.
+        This endpoint handles subscription lifecycle events, payment failures,
+        and other critical payment events.
+        
+        **Supported Events:**
+        - invoice.payment_succeeded
+        - invoice.payment_failed
+        - customer.subscription.created
+        - customer.subscription.updated
+        - customer.subscription.deleted
+        - payment_method.attached
+        - payment_method.detached
+        
+        **Security:**
+        - Stripe signature verification required
+        - Event replay protection
+        - Idempotency handling
+        - Secure event processing
+        
+        **Rate Limit:** 1000 requests per minute (Stripe webhook limit)
+      operationId: processWebhook
+      parameters:
+        - name: stripe-signature
+          in: header
+          required: true
+          description: Stripe signature for webhook verification
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Stripe webhook event payload
+      responses:
+        '200':
+          description: Webhook processed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Webhook processed successfully"
+        '400':
+          description: Invalid webhook signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payment/history:
+    get:
+      tags:
+        - Payment
+      summary: Get payment history
+      description: |
+        Retrieve comprehensive payment history for the current user including successful
+        payments, failed attempts, refunds, and pending transactions. This endpoint
+        provides detailed financial records for accounting and support purposes.
+        
+        **Included Information:**
+        - Payment amounts and currencies
+        - Transaction status and timestamps
+        - Associated subscriptions and invoices
+        - Payment methods used
+        - Refund details when applicable
+        
+        **Rate Limit:** 20 requests per minute, 500 per hour
+      operationId: getPaymentHistory
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Number of records to return
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of records to skip
+          schema:
+            type: integer
+            default: 0
+        - name: status
+          in: query
+          description: Filter by payment status
+          schema:
+            type: string
+            enum: [succeeded, pending, failed, refunded]
+      responses:
+        '200':
+          description: Payment history retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      payments:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Payment'
+                      total:
+                        type: integer
+                        example: 15
+                      hasMore:
+                        type: boolean
+                        example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payment/invoices:
+    get:
+      tags:
+        - Payment
+      summary: Get invoices
+      description: |
+        Retrieve all invoices for the current user including paid, pending, and draft
+        invoices. Each invoice includes detailed line items, tax information, and
+        payment status.
+        
+        **Invoice Information:**
+        - Billing periods and amounts
+        - Tax calculations and breakdowns
+        - Payment status and dates
+        - Download links for PDF copies
+        - Associated subscription details
+        
+        **Rate Limit:** 20 requests per minute, 500 per hour
+      operationId: getInvoices
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Number of records to return
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of records to skip
+          schema:
+            type: integer
+            default: 0
+        - name: status
+          in: query
+          description: Filter by invoice status
+          schema:
+            type: string
+            enum: [draft, open, paid, void, uncollectible]
+      responses:
+        '200':
+          description: Invoices retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      invoices:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Invoice'
+                      total:
+                        type: integer
+                        example: 12
+                      hasMore:
+                        type: boolean
+                        example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payment/invoices/{invoiceId}:
+    get:
+      tags:
+        - Payment
+      summary: Get invoice details
+      description: Retrieve details for a specific invoice
+      operationId: getInvoice
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: invoiceId
+          in: path
+          required: true
+          description: Invoice ID
+          schema:
+            type: string
+            example: in_1O2x3a2eZvKYlo2C5Zl3xY2a
+      responses:
+        '200':
+          description: Invoice retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Invoice'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Invoice not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /payment/refunds:
+    get:
+      tags:
+        - Payment
+      summary: Get refunds
+      description: |
+        Retrieve all refunds for the current user including full refunds, partial refunds,
+        and refund status. This provides complete refund history for transparency and
+        accounting purposes.
+        
+        **Refund Details:**
+        - Original payment information
+        - Refund amounts and reasons
+        - Processing status and timelines
+        - Refund method and destination
+        - Associated dispute information
+        
+        **Rate Limit:** 20 requests per minute, 500 per hour
+      operationId: getRefunds
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Number of records to return
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of records to skip
+          schema:
+            type: integer
+            default: 0
+        - name: status
+          in: query
+          description: Filter by refund status
+          schema:
+            type: string
+            enum: [succeeded, pending, failed, canceled]
+      responses:
+        '200':
+          description: Refunds retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      refunds:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Refund'
+                      total:
+                        type: integer
+                        example: 3
+                      hasMore:
+                        type: boolean
+                        example: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    SubscriptionPlan:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Stripe price ID
+          example: price_1O2x3a2eZvKYlo2C5Zl3xY2a
+        name:
+          type: string
+          description: Plan name
+          example: "Premium"
+        description:
+          type: string
+          description: Plan description
+          example: "Access to premium features including unlimited swipes and advanced filters"
+        amount:
+          type: integer
+          description: Price in cents
+          example: 999
+        currency:
+          type: string
+          description: Currency code
+          example: "usd"
+        interval:
+          type: string
+          enum: [day, week, month, year]
+          description: Billing interval
+          example: "month"
+        intervalCount:
+          type: integer
+          description: Number of intervals between billing dates
+          example: 1
+        trialPeriodDays:
+          type: integer
+          description: Number of trial days
+          example: 7
+        features:
+          type: array
+          items:
+            type: string
+          description: List of features included in the plan
+          example: ["Unlimited swipes", "Advanced filters", "See who liked you"]
+        isActive:
+          type: boolean
+          description: Whether the plan is currently active
+          example: true
+        metadata:
+          type: object
+          description: Additional metadata
+          example:
+            tier: "premium"
+            popular: true
+
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Subscription ID
+          example: sub_1O2x3a2eZvKYlo2C5Zl3xY2a
+        userId:
+          type: string
+          description: User ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        planId:
+          type: string
+          description: Plan ID
+          example: price_1O2x3a2eZvKYlo2C5Zl3xY2a
+        planName:
+          type: string
+          description: Plan name
+          example: "Premium"
+        status:
+          type: string
+          enum: [trialing, active, past_due, canceled, unpaid, incomplete]
+          description: Subscription status
+          example: "active"
+        currentPeriodStart:
+          type: string
+          format: date-time
+          description: Start of current billing period
+          example: "2025-01-01T00:00:00Z"
+        currentPeriodEnd:
+          type: string
+          format: date-time
+          description: End of current billing period
+          example: "2025-02-01T00:00:00Z"
+        trialStart:
+          type: string
+          format: date-time
+          description: Start of trial period
+          example: "2025-01-01T00:00:00Z"
+        trialEnd:
+          type: string
+          format: date-time
+          description: End of trial period
+          example: "2025-01-08T00:00:00Z"
+        cancelAtPeriodEnd:
+          type: boolean
+          description: Whether subscription will cancel at period end
+          example: false
+        canceledAt:
+          type: string
+          format: date-time
+          description: When subscription was canceled
+          example: "2025-01-15T00:00:00Z"
+        endedAt:
+          type: string
+          format: date-time
+          description: When subscription ended
+          example: "2025-02-01T00:00:00Z"
+        stripeSubscriptionId:
+          type: string
+          description: Stripe subscription ID
+          example: sub_1O2x3a2eZvKYlo2C5Zl3xY2a
+        stripeCustomerId:
+          type: string
+          description: Stripe customer ID
+          example: cus_1O2x3a2eZvKYlo2C5Zl3xY2a
+        createdAt:
+          type: string
+          format: date-time
+          description: When subscription was created
+          example: "2025-01-01T00:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: When subscription was last updated
+          example: "2025-01-01T00:00:00Z"
+
+    PaymentMethod:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Payment method ID
+          example: pm_1O2x3a2eZvKYlo2C5Zl3xY2a
+        userId:
+          type: string
+          description: User ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        stripePaymentMethodId:
+          type: string
+          description: Stripe payment method ID
+          example: pm_1O2x3a2eZvKYlo2C5Zl3xY2a
+        type:
+          type: string
+          enum: [card, sepa_debit, us_bank_account]
+          description: Payment method type
+          example: "card"
+        brand:
+          type: string
+          description: Card brand (for cards)
+          example: "visa"
+        last4:
+          type: string
+          description: Last 4 digits (for cards)
+          example: "4242"
+        expMonth:
+          type: integer
+          description: Expiration month (for cards)
+          example: 12
+        expYear:
+          type: integer
+          description: Expiration year (for cards)
+          example: 2025
+        country:
+          type: string
+          description: Country code
+          example: "US"
+        isDefault:
+          type: boolean
+          description: Whether this is the default payment method
+          example: true
+        metadata:
+          type: object
+          description: Additional metadata
+          example:
+            nickname: "Personal Visa"
+        createdAt:
+          type: string
+          format: date-time
+          description: When payment method was created
+          example: "2025-01-01T00:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: When payment method was last updated
+          example: "2025-01-01T00:00:00Z"
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Payment ID
+          example: pay_1O2x3a2eZvKYlo2C5Zl3xY2a
+        userId:
+          type: string
+          description: User ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        stripePaymentIntentId:
+          type: string
+          description: Stripe payment intent ID
+          example: pi_1O2x3a2eZvKYlo2C5Zl3xY2a
+        amount:
+          type: integer
+          description: Payment amount in cents
+          example: 999
+        currency:
+          type: string
+          description: Currency code
+          example: "usd"
+        status:
+          type: string
+          enum: [requires_payment_method, requires_confirmation, requires_action, processing, requires_capture, canceled, succeeded]
+          description: Payment status
+          example: "succeeded"
+        paymentMethodId:
+          type: string
+          description: Payment method ID
+          example: pm_1O2x3a2eZvKYlo2C5Zl3xY2a
+        description:
+          type: string
+          description: Payment description
+          example: "Premium subscription"
+        metadata:
+          type: object
+          description: Additional metadata
+          example:
+            subscriptionId: "sub_1O2x3a2eZvKYlo2C5Zl3xY2a"
+        createdAt:
+          type: string
+          format: date-time
+          description: When payment was created
+          example: "2025-01-01T00:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: When payment was last updated
+          example: "2025-01-01T00:00:00Z"
+
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Invoice ID
+          example: in_1O2x3a2eZvKYlo2C5Zl3xY2a
+        userId:
+          type: string
+          description: User ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        stripeInvoiceId:
+          type: string
+          description: Stripe invoice ID
+          example: in_1O2x3a2eZvKYlo2C5Zl3xY2a
+        subscriptionId:
+          type: string
+          description: Subscription ID
+          example: sub_1O2x3a2eZvKYlo2C5Zl3xY2a
+        status:
+          type: string
+          enum: [draft, open, paid, void, uncollectible]
+          description: Invoice status
+          example: "paid"
+        amount:
+          type: integer
+          description: Invoice amount in cents
+          example: 999
+        currency:
+          type: string
+          description: Currency code
+          example: "usd"
+        dueDate:
+          type: string
+          format: date-time
+          description: Invoice due date
+          example: "2025-02-01T00:00:00Z"
+        paidAt:
+          type: string
+          format: date-time
+          description: When invoice was paid
+          example: "2025-01-01T00:00:00Z"
+        hostedInvoiceUrl:
+          type: string
+          description: URL to view invoice
+          example: "https://invoice.stripe.com/invoice/acct_1O2x3a2eZvKYlo2C5Zl3xY2a"
+        invoicePdf:
+          type: string
+          description: URL to download PDF invoice
+          example: "https://invoice.stripe.com/invoice/acct_1O2x3a2eZvKYlo2C5Zl3xY2a/pdf"
+        metadata:
+          type: object
+          description: Additional metadata
+          example:
+            billingPeriod: "2025-01"
+        createdAt:
+          type: string
+          format: date-time
+          description: When invoice was created
+          example: "2025-01-01T00:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: When invoice was last updated
+          example: "2025-01-01T00:00:00Z"
+
+    Refund:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Refund ID
+          example: re_1O2x3a2eZvKYlo2C5Zl3xY2a
+        userId:
+          type: string
+          description: User ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        stripeRefundId:
+          type: string
+          description: Stripe refund ID
+          example: re_1O2x3a2eZvKYlo2C5Zl3xY2a
+        paymentId:
+          type: string
+          description: Payment ID
+          example: pay_1O2x3a2eZvKYlo2C5Zl3xY2a
+        amount:
+          type: integer
+          description: Refund amount in cents
+          example: 999
+        currency:
+          type: string
+          description: Currency code
+          example: "usd"
+        status:
+          type: string
+          enum: [pending, succeeded, failed, canceled]
+          description: Refund status
+          example: "succeeded"
+        reason:
+          type: string
+          enum: [duplicate, fraudulent, requested_by_customer]
+          description: Refund reason
+          example: "requested_by_customer"
+        description:
+          type: string
+          description: Refund description
+          example: "Customer requested refund"
+        metadata:
+          type: object
+          description: Additional metadata
+          example:
+            processedBy: "admin"
+        createdAt:
+          type: string
+          format: date-time
+          description: When refund was created
+          example: "2025-01-01T00:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: When refund was last updated
+          example: "2025-01-01T00:00:00Z"
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "Invalid request parameters"
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    example: "planId"
+                  message:
+                    type: string
+                    example: "Plan ID is required"
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

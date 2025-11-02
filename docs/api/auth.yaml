@@ -1,0 +1,1213 @@
+openapi: 3.0.3
+info:
+  title: Winkr Authentication API
+  description: |
+    Authentication endpoints for the Winkr dating application.
+    
+    This API provides comprehensive authentication and authorization functionality including:
+    - User registration and login with email or phone
+    - JWT-based authentication with refresh tokens
+    - Email and phone verification
+    - Password reset functionality
+    - Session management
+    - Device tracking and management
+    
+    ## Security Features
+    - Rate limiting on all endpoints (5 requests per minute for auth endpoints)
+    - Password strength requirements (min 8 characters, uppercase, lowercase, number, special character)
+    - Device fingerprinting for enhanced security
+    - Session management with automatic token refresh
+    - Secure password storage with bcrypt hashing
+    
+    ## Rate Limiting
+    - Authentication endpoints: 5 requests per minute per IP
+    - Verification endpoints: 3 requests per minute per email/phone
+    - Password reset: 3 requests per hour per email/phone
+    - Session endpoints: 10 requests per minute per authenticated user
+  version: 1.0.0
+  contact:
+    name: Winkr API Team
+    email: api@winkr.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.winkr.com/v1
+    description: Production server
+  - url: https://staging-api.winkr.com/v1
+    description: Staging server
+  - url: http://localhost:8080/v1
+    description: Development server
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: |
+        Create a new user account with email or phone number.
+        
+        ## Registration Process
+        1. User provides email/phone, password, username, date of birth, and gender
+        2. System validates input data and password strength
+        3. Device information is recorded for security tracking
+        4. User account is created with "pending" verification status
+        5. Verification code is sent to provided email/phone
+        6. JWT tokens are returned for immediate access
+        
+        ## Security Notes
+        - Passwords are hashed using bcrypt with cost factor 12
+        - Email/phone uniqueness is enforced
+        - Device fingerprinting is implemented for security
+        - Rate limiting: 5 requests per minute per IP
+        - Minimum age requirement: 18 years old
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              email:
+                summary: Registration with email
+                value:
+                  email: "user@example.com"
+                  password: "SecurePass123!"
+                  username: "johndoe"
+                  date_of_birth: "1990-01-01"
+                  gender: "male"
+                  device_info:
+                    device_id: "unique-device-id"
+                    device_type: "mobile"
+                    os: "iOS 15.0"
+                    app_version: "1.0.0"
+              phone:
+                summary: Registration with phone
+                value:
+                  phone: "+1234567890"
+                  password: "SecurePass123!"
+                  username: "johndoe"
+                  date_of_birth: "1990-01-01"
+                  gender: "male"
+                  device_info:
+                    device_id: "unique-device-id"
+                    device_type: "mobile"
+                    os: "iOS 15.0"
+                    app_version: "1.0.0"
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              examples:
+                success:
+                  summary: Successful registration
+                  value:
+                    success: true
+                    data:
+                      user:
+                        id: "123e4567-e89b-12d3-a456-426614174000"
+                        email: "user@example.com"
+                        username: "johndoe"
+                        verification_status: "pending"
+                        created_at: "2025-01-01T00:00:00Z"
+                      tokens:
+                        access_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        expires_in: 3600
+                      device:
+                        id: "device-uuid"
+                        is_new: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: |
+        Authenticate user with email/phone and password.
+        
+        ## Login Process
+        1. User provides credentials and device information
+        2. System validates credentials against stored hash
+        3. Account status is checked (not blocked/suspended)
+        4. Device is registered or updated in session tracking
+        5. JWT tokens are generated and returned
+        6. Login attempt is logged for security monitoring
+        
+        ## Security Features
+        - Failed login attempts are tracked and logged
+        - Account lockout after 5 failed attempts (15 minute cooldown)
+        - Device fingerprinting for anomaly detection
+        - Rate limiting: 5 requests per minute per IP
+        - Supports both email and phone login
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              email:
+                summary: Login with email
+                value:
+                  email: "user@example.com"
+                  password: "SecurePass123!"
+                  device_info:
+                    device_id: "unique-device-id"
+                    device_type: "mobile"
+                    os: "iOS 15.0"
+                    app_version: "1.0.0"
+              phone:
+                summary: Login with phone
+                value:
+                  phone: "+1234567890"
+                  password: "SecurePass123!"
+                  device_info:
+                    device_id: "unique-device-id"
+                    device_type: "mobile"
+                    os: "iOS 15.0"
+                    app_version: "1.0.0"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              examples:
+                success:
+                  summary: Successful login
+                  value:
+                    success: true
+                    data:
+                      user:
+                        id: "123e4567-e89b-12d3-a456-426614174000"
+                        email: "user@example.com"
+                        username: "johndoe"
+                        verification_status: "verified"
+                        created_at: "2025-01-01T00:00:00Z"
+                      tokens:
+                        access_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        expires_in: 3600
+                      device:
+                        id: "device-uuid"
+                        is_new: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: |
+        Get a new access token using a refresh token.
+        
+        ## Token Refresh Process
+        1. Client provides valid refresh token
+        2. System validates refresh token and checks expiry
+        3. New access token is generated with updated expiry
+        4. New refresh token may be issued (token rotation)
+        5. Old refresh token is invalidated
+        
+        ## Security Notes
+        - Refresh tokens have longer expiry (7 days)
+        - Token rotation is implemented for enhanced security
+        - Refresh tokens are stored securely in database
+        - Rate limiting: 10 requests per minute per IP
+        - Automatic cleanup of expired tokens
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+            examples:
+              success:
+                summary: Refresh token request
+                value:
+                  refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+              examples:
+                success:
+                  summary: Successful token refresh
+                  value:
+                    success: true
+                    data:
+                      access_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                      refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                      expires_in: 3600
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: |
+        Logout user and invalidate tokens.
+        
+        ## Logout Process
+        1. Client provides refresh token and optional device ID
+        2. System validates access token
+        3. Refresh token is invalidated immediately
+        4. Device session is marked as inactive
+        5. All tokens for specified device are invalidated
+        
+        ## Security Features
+        - Immediate token invalidation
+        - Device-specific logout support
+        - Session cleanup on logout
+        - Rate limiting: 10 requests per minute per authenticated user
+        - Audit logging for security compliance
+      operationId: logout
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+            examples:
+              success:
+                summary: Logout request
+                value:
+                  refresh_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  device_id: "device-uuid"
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                success:
+                  summary: Successful logout
+                  value:
+                    success: true
+                    message: "Logged out successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/verify:
+    post:
+      tags:
+        - Authentication
+      summary: Verify email or phone
+      description: |
+        Verify user email or phone with verification code.
+        
+        ## Verification Process
+        1. User provides email/phone and 6-digit verification code
+        2. System validates the verification code
+        3. Code expiry is checked (10 minutes from sending)
+        4. User verification status is updated to "verified"
+        5. Verification attempt is logged for audit
+        
+        ## Security Features
+        - 6-digit alphanumeric codes with 10-minute expiry
+        - Maximum 3 attempts per code
+        - Rate limiting: 3 requests per minute per email/phone
+        - Code generation using cryptographically secure random generator
+        - Verification history tracking for compliance
+      operationId: verify
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRequest'
+            examples:
+              email:
+                summary: Email verification
+                value:
+                  email: "user@example.com"
+                  code: "123456"
+              phone:
+                summary: Phone verification
+                value:
+                  phone: "+1234567890"
+                  code: "123456"
+      responses:
+        '200':
+          description: Verification successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                success:
+                  summary: Successful verification
+                  value:
+                    success: true
+                    message: "Email verified successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/send-verification:
+    post:
+      tags:
+        - Authentication
+      summary: Send verification code
+      description: |
+        Send verification code to email or phone.
+        
+        ## Code Sending Process
+        1. User provides email or phone number
+        2. System validates the email/phone format
+        3. 6-digit verification code is generated
+        4. Code is sent via email or SMS
+        5. Sending attempt is logged for audit
+        
+        ## Security Features
+        - Rate limiting: 3 requests per minute per email/phone
+        - Maximum 10 codes per day per email/phone
+        - 10-minute code expiry
+        - Secure code generation using CSPRNG
+        - Delivery status tracking
+        - Anti-spam protection
+      operationId: sendVerification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendVerificationRequest'
+            examples:
+              email:
+                summary: Send email verification
+                value:
+                  email: "user@example.com"
+              phone:
+                summary: Send phone verification
+                value:
+                  phone: "+1234567890"
+      responses:
+        '200':
+          description: Verification code sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                success:
+                  summary: Verification code sent
+                  value:
+                    success: true
+                    message: "Verification code sent successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/password-reset:
+    post:
+      tags:
+        - Authentication
+      summary: Request password reset
+      description: |
+        Send password reset code to email or phone.
+        
+        ## Password Reset Process
+        1. User provides email or phone number
+        2. System validates the email/phone exists in database
+        3. 6-digit reset code is generated
+        4. Code is sent via email or SMS
+        5. Reset request is logged for security monitoring
+        
+        ## Security Features
+        - Rate limiting: 3 requests per hour per email/phone
+        - Maximum 5 reset attempts per day
+        - 15-minute code expiry
+        - Secure code generation using CSPRNG
+        - Account existence confirmation (prevents enumeration)
+        - Reset history tracking
+      operationId: requestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+            examples:
+              email:
+                summary: Email password reset
+                value:
+                  email: "user@example.com"
+              phone:
+                summary: Phone password reset
+                value:
+                  phone: "+1234567890"
+      responses:
+        '200':
+          description: Password reset code sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                success:
+                  summary: Password reset code sent
+                  value:
+                    success: true
+                    message: "Password reset code sent successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/password-reset/confirm:
+    post:
+      tags:
+        - Authentication
+      summary: Confirm password reset
+      description: |
+        Reset password with verification code.
+        
+        ## Password Reset Confirmation Process
+        1. User provides email/phone, reset code, and new password
+        2. System validates the reset code and expiry
+        3. New password strength is validated
+        4. Password is updated with new bcrypt hash
+        5. All active sessions are invalidated for security
+        6. Reset confirmation is logged for audit
+        
+        ## Security Features
+        - Rate limiting: 3 requests per hour per email/phone
+        - Maximum 3 attempts per reset code
+        - 15-minute code expiry
+        - Password strength validation
+        - Automatic session invalidation
+        - Password history tracking (prevent reuse)
+      operationId: confirmPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+            examples:
+              success:
+                summary: Password reset confirmation
+                value:
+                  email: "user@example.com"
+                  code: "123456"
+                  new_password: "NewSecurePass123!"
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                success:
+                  summary: Password reset successful
+                  value:
+                    success: true
+                    message: "Password reset successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/profile:
+    get:
+      tags:
+        - Authentication
+      summary: Get user profile
+      description: |
+        Get current user profile information.
+        
+        ## Profile Retrieval Process
+        1. Client provides valid JWT access token
+        2. System validates token and extracts user ID
+        3. User profile data is retrieved from database
+        4. Sensitive information is filtered out
+        5. Profile information is returned
+        
+        ## Security Features
+        - JWT token validation
+        - Automatic token expiry checking
+        - Rate limiting: 10 requests per minute per authenticated user
+        - Profile data filtering for privacy
+        - Audit logging for profile access
+      operationId: getProfile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+              examples:
+                success:
+                  summary: Successful profile retrieval
+                  value:
+                    success: true
+                    data:
+                      user:
+                        id: "123e4567-e89b-12d3-a456-426614174000"
+                        email: "user@example.com"
+                        username: "johndoe"
+                        verification_status: "verified"
+                        created_at: "2025-01-01T00:00:00Z"
+                        updated_at: "2025-01-01T00:00:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /auth/sessions:
+    get:
+      tags:
+        - Authentication
+      summary: Get user sessions
+      description: |
+        Get all active sessions for the current user.
+        
+        ## Session Retrieval Process
+        1. Client provides valid JWT access token
+        2. System validates token and extracts user ID
+        3. All active sessions for the user are retrieved
+        4. Current session is marked for identification
+        5. Session details are returned with security info
+        
+        ## Security Features
+        - JWT token validation
+        - Session ownership verification
+        - IP address and device tracking
+        - Rate limiting: 10 requests per minute per authenticated user
+        - Security anomaly detection
+        - Session activity monitoring
+      operationId: getSessions
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Sessions retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionsResponse'
+              examples:
+                success:
+                  summary: Successful sessions retrieval
+                  value:
+                    success: true
+                    data:
+                      sessions:
+                        - id: "session-uuid-1"
+                          device_id: "device-uuid-1"
+                          device_type: "mobile"
+                          os: "iOS 15.0"
+                          ip_address: "192.168.1.1"
+                          user_agent: "Winkr/1.0.0 (iOS)"
+                          is_current: true
+                          created_at: "2025-01-01T00:00:00Z"
+                          last_active: "2025-01-01T12:00:00Z"
+                        - id: "session-uuid-2"
+                          device_id: "device-uuid-2"
+                          device_type: "web"
+                          os: "Windows 10"
+                          ip_address: "192.168.1.2"
+                          user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                          is_current: false
+                          created_at: "2025-01-01T00:00:00Z"
+                          last_active: "2025-01-01T10:00:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - password
+        - username
+        - date_of_birth
+        - gender
+        - device_info
+      properties:
+        email:
+          type: string
+          format: email
+          description: User email address (optional if phone is provided)
+          example: "user@example.com"
+        phone:
+          type: string
+          description: User phone number with country code (optional if email is provided)
+          example: "+1234567890"
+        password:
+          type: string
+          minLength: 8
+          description: User password (min 8 characters, must contain uppercase, lowercase, number, and special character)
+          example: "SecurePass123!"
+        username:
+          type: string
+          minLength: 3
+          maxLength: 30
+          pattern: '^[a-zA-Z0-9_]+$'
+          description: Unique username (alphanumeric and underscore only)
+          example: "johndoe"
+        date_of_birth:
+          type: string
+          format: date
+          description: User date of birth (must be 18+ years old)
+          example: "1990-01-01"
+        gender:
+          type: string
+          enum: [male, female, other]
+          description: User gender
+          example: "male"
+        device_info:
+          $ref: '#/components/schemas/DeviceInfo'
+
+    LoginRequest:
+      type: object
+      required:
+        - password
+        - device_info
+      properties:
+        email:
+          type: string
+          format: email
+          description: User email address (optional if phone is provided)
+          example: "user@example.com"
+        phone:
+          type: string
+          description: User phone number with country code (optional if email is provided)
+          example: "+1234567890"
+        password:
+          type: string
+          description: User password
+          example: "SecurePass123!"
+        device_info:
+          $ref: '#/components/schemas/DeviceInfo'
+
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          description: Refresh token
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+    LogoutRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          description: Refresh token to invalidate
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        device_id:
+          type: string
+          description: Device ID to logout from (optional)
+          example: "device-uuid"
+
+    VerifyRequest:
+      type: object
+      required:
+        - code
+      properties:
+        email:
+          type: string
+          format: email
+          description: User email address (optional if phone is provided)
+          example: "user@example.com"
+        phone:
+          type: string
+          description: User phone number with country code (optional if email is provided)
+          example: "+1234567890"
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+          description: 6-digit verification code
+          example: "123456"
+
+    SendVerificationRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: User email address (optional if phone is provided)
+          example: "user@example.com"
+        phone:
+          type: string
+          description: User phone number with country code (optional if email is provided)
+          example: "+1234567890"
+
+    PasswordResetRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: User email address (optional if phone is provided)
+          example: "user@example.com"
+        phone:
+          type: string
+          description: User phone number with country code (optional if email is provided)
+          example: "+1234567890"
+
+    PasswordResetConfirmRequest:
+      type: object
+      required:
+        - code
+        - new_password
+      properties:
+        email:
+          type: string
+          format: email
+          description: User email address (optional if phone is provided)
+          example: "user@example.com"
+        phone:
+          type: string
+          description: User phone number with country code (optional if email is provided)
+          example: "+1234567890"
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+          description: 6-digit verification code
+          example: "123456"
+        new_password:
+          type: string
+          minLength: 8
+          description: New password (min 8 characters, must contain uppercase, lowercase, number, and special character)
+          example: "NewSecurePass123!"
+
+    DeviceInfo:
+      type: object
+      required:
+        - device_id
+        - device_type
+        - os
+        - app_version
+      properties:
+        device_id:
+          type: string
+          description: Unique device identifier
+          example: "unique-device-id"
+        device_type:
+          type: string
+          enum: [mobile, web, desktop]
+          description: Device type
+          example: "mobile"
+        os:
+          type: string
+          description: Operating system and version
+          example: "iOS 15.0"
+        app_version:
+          type: string
+          description: Application version
+          example: "1.0.0"
+
+    AuthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+            tokens:
+              $ref: '#/components/schemas/Tokens'
+            device:
+              $ref: '#/components/schemas/Device'
+
+    TokenResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            access_token:
+              type: string
+              example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            refresh_token:
+              type: string
+              example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            expires_in:
+              type: integer
+              example: 3600
+
+    ProfileResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+
+    SessionsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            sessions:
+              type: array
+              items:
+                $ref: '#/components/schemas/Session'
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Operation successful"
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "Invalid input data"
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    example: "email"
+                  message:
+                    type: string
+                    example: "Invalid email format"
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        phone:
+          type: string
+          example: "+1234567890"
+        username:
+          type: string
+          example: "johndoe"
+        verification_status:
+          type: string
+          enum: [pending, verified, blocked]
+          example: "verified"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+
+    Tokens:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refresh_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        expires_in:
+          type: integer
+          example: 3600
+
+    Device:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "device-uuid"
+        is_new:
+          type: boolean
+          example: true
+
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "session-uuid"
+        device_id:
+          type: string
+          example: "device-uuid"
+        device_type:
+          type: string
+          enum: [mobile, web, desktop]
+          example: "mobile"
+        os:
+          type: string
+          example: "iOS 15.0"
+        ip_address:
+          type: string
+          example: "192.168.1.1"
+        user_agent:
+          type: string
+          example: "Winkr/1.0.0 (iOS)"
+        is_current:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+        last_active:
+          type: string
+          format: date-time
+          example: "2025-01-01T12:00:00Z"
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            bad_request:
+              summary: Bad request error
+              value:
+                success: false
+                error:
+                  code: "BAD_REQUEST"
+                  message: "Invalid request data"
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            unauthorized:
+              summary: Unauthorized error
+              value:
+                success: false
+                error:
+                  code: "UNAUTHORIZED"
+                  message: "Invalid credentials"
+
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            forbidden:
+              summary: Forbidden error
+              value:
+                success: false
+                error:
+                  code: "FORBIDDEN"
+                  message: "Account locked or suspended"
+
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            not_found:
+              summary: Not found error
+              value:
+                success: false
+                error:
+                  code: "NOT_FOUND"
+                  message: "User not found"
+
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            conflict:
+              summary: Conflict error
+              value:
+                success: false
+                error:
+                  code: "CONFLICT"
+                  message: "User already exists"
+
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            validation_error:
+              summary: Validation error
+              value:
+                success: false
+                error:
+                  code: "VALIDATION_ERROR"
+                  message: "Invalid input data"
+                  details:
+                    - field: "email"
+                      message: "Invalid email format"
+                    - field: "password"
+                      message: "Password must be at least 8 characters"
+
+    TooManyRequests:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            rate_limit:
+              summary: Rate limit error
+              value:
+                success: false
+                error:
+                  code: "TOO_MANY_REQUESTS"
+                  message: "Rate limit exceeded. Please try again later."
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            internal_error:
+              summary: Internal server error
+              value:
+                success: false
+                error:
+                  code: "INTERNAL_SERVER_ERROR"
+                  message: "An unexpected error occurred"
+
+tags:
+  - name: Authentication
+    description: Authentication and authorization endpoints

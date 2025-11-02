@@ -1,0 +1,1022 @@
+openapi: 3.0.3
+info:
+  title: Winkr Chat API
+  description: |
+    Chat and messaging endpoints for Winkr dating application.
+    
+    This API provides comprehensive messaging functionality including:
+    - Real-time messaging with WebSocket support
+    - Conversation management with pagination
+    - Multiple message types (text, photo, location, gifts)
+    - Message read status tracking
+    - Ephemeral photo support
+    - Message deletion and moderation
+    - Online status indicators
+    - Push notification integration
+    
+    ## Security Features
+    - JWT-based authentication for all endpoints
+    - Message content filtering and moderation
+    - Rate limiting to prevent spam and abuse
+    - Access control based on match status
+    - Message encryption in transit and at rest
+    - Audit logging for all message operations
+    - Anti-spam and harassment detection
+    - Photo content validation and safety checks
+    
+    ## Rate Limiting
+    - Conversation listing: 30 requests per minute per authenticated user
+    - Starting conversations: 10 requests per minute per authenticated user
+    - Message retrieval: 60 requests per minute per authenticated user
+    - Message sending: 30 requests per minute per authenticated user
+    - Mark as read: 60 requests per minute per authenticated user
+    - Message deletion: 20 requests per minute per authenticated user
+    - WebSocket connections: 5 connections per minute per authenticated user
+  version: 1.0.0
+  contact:
+    name: Winkr API Team
+    email: api@winkr.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.winkr.com/v1
+    description: Production server
+  - url: https://staging-api.winkr.com/v1
+    description: Staging server
+  - url: http://localhost:8080/v1
+    description: Development server
+
+paths:
+  /chats:
+    get:
+      tags:
+        - Chat
+      summary: Get user conversations
+      description: |
+        Retrieve all conversations for the authenticated user with pagination.
+        
+        ## Conversation Retrieval Process
+        1. Client provides valid JWT access token
+        2. System validates token and extracts user ID
+        3. User's conversations are retrieved with pagination
+        4. Last message and unread count are calculated
+        5. Other user's online status is included
+        6. Privacy settings are applied to conversation data
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Conversation ownership verification
+        - Rate limiting: 30 requests per minute per authenticated user
+        - Privacy filtering based on user settings
+        - Online status privacy controls
+        - Unread count calculation with permissions
+        - Message content filtering
+      operationId: getConversations
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number for pagination
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of conversations per page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Conversations retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationsResponse'
+              examples:
+                success:
+                  summary: Successful conversations retrieval
+                  value:
+                    success: true
+                    data:
+                      conversations:
+                        - id: "conv-uuid-1"
+                          match_id: "match-uuid-1"
+                          other_user:
+                            id: "user-uuid-2"
+                            username: "jane_doe"
+                            avatar_url: "https://example.com/avatar.jpg"
+                            is_online: true
+                          last_message:
+                            id: "msg-uuid-1"
+                            content: "Hey! How are you?"
+                            type: "text"
+                            sender_id: "user-uuid-2"
+                            created_at: "2025-01-01T12:00:00Z"
+                            is_read: false
+                          unread_count: 3
+                          updated_at: "2025-01-01T12:00:00Z"
+                      pagination:
+                        page: 1
+                        limit: 20
+                        total: 45
+                        total_pages: 3
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /chats/start:
+    post:
+      tags:
+        - Chat
+      summary: Start a new conversation
+      description: |
+        Start a new conversation with a matched user.
+        
+        ## Conversation Start Process
+        1. Client provides valid JWT token and match ID
+        2. System validates token and match relationship
+        3. Check if conversation already exists
+        4. Validate initial message content
+        5. Create new conversation with initial message
+        6. Trigger notifications for recipient
+        7. Log conversation start for analytics
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Match relationship verification
+        - Duplicate conversation prevention
+        - Initial message content filtering
+        - Rate limiting: 10 requests per minute per authenticated user
+        - Anti-spam protection
+        - Notification rate limiting
+        - Content moderation integration
+      operationId: startConversation
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartConversationRequest'
+            examples:
+              success:
+                summary: Start conversation request
+                value:
+                  match_id: "match-uuid-1"
+                  initial_message: "Hey! I noticed we matched. How are you?"
+      responses:
+        '201':
+          description: Conversation started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationResponse'
+              examples:
+                success:
+                  summary: Successful conversation start
+                  value:
+                    success: true
+                    data:
+                      conversation:
+                        id: "conv-uuid-1"
+                        match_id: "match-uuid-1"
+                        other_user:
+                          id: "user-uuid-2"
+                          username: "jane_doe"
+                          avatar_url: "https://example.com/avatar.jpg"
+                          is_online: true
+                        created_at: "2025-01-01T12:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /chats/{conversationId}/messages:
+    get:
+      tags:
+        - Chat
+      summary: Get conversation messages
+      description: |
+        Retrieve messages from a specific conversation with pagination.
+        
+        ## Message Retrieval Process
+        1. Client provides valid JWT token and conversation ID
+        2. System validates token and conversation access
+        3. Messages are retrieved with pagination
+        4. Message content is filtered based on permissions
+        5. Read status and metadata are included
+        6. Sensitive content is masked if needed
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Conversation access verification
+        - Rate limiting: 60 requests per minute per authenticated user
+        - Message content filtering
+        - Pagination to prevent data overload
+        - Read status privacy controls
+        - Content moderation results
+        - Sensitive content masking
+      operationId: getMessages
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          description: Conversation ID
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          description: Page number for pagination
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of messages per page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: before
+          in: query
+          description: Get messages before this message ID (for pagination)
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Messages retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessagesResponse'
+              examples:
+                success:
+                  summary: Successful messages retrieval
+                  value:
+                    success: true
+                    data:
+                      messages:
+                        - id: "msg-uuid-1"
+                          conversation_id: "conv-uuid-1"
+                          sender_id: "user-uuid-1"
+                          content: "Hey! How are you?"
+                          type: "text"
+                          created_at: "2025-01-01T12:00:00Z"
+                          updated_at: "2025-01-01T12:00:00Z"
+                          is_read: true
+                          metadata: {}
+                        - id: "msg-uuid-2"
+                          conversation_id: "conv-uuid-1"
+                          sender_id: "user-uuid-2"
+                          content: "I'm doing great! How about you?"
+                          type: "text"
+                          created_at: "2025-01-01T12:05:00Z"
+                          updated_at: "2025-01-01T12:05:00Z"
+                          is_read: true
+                          metadata: {}
+                      pagination:
+                        page: 1
+                        limit: 20
+                        total: 100
+                        total_pages: 5
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Chat
+      summary: Send a message
+      description: |
+        Send a new message to a conversation.
+        
+        ## Message Sending Process
+        1. Client provides valid JWT token and message data
+        2. System validates token and conversation access
+        3. Message content is filtered and moderated
+        4. Message is stored with metadata
+        5. Real-time delivery via WebSocket
+        6. Push notifications are triggered
+        7. Message is logged for analytics
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Conversation access verification
+        - Content filtering and moderation
+        - Rate limiting: 30 requests per minute per authenticated user
+        - Anti-spam and harassment detection
+        - Photo content validation for photo messages
+        - Location privacy controls
+        - Message encryption at rest
+      operationId: sendMessage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          description: Conversation ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+            examples:
+              text_message:
+                summary: Send text message
+                value:
+                  content: "Hey! How are you?"
+                  type: "text"
+              photo_message:
+                summary: Send photo message
+                value:
+                  content: "https://example.com/photo.jpg"
+                  type: "photo"
+                  metadata:
+                    width: 800
+                    height: 600
+                    size: 1024000
+              location_message:
+                summary: Send location message
+                value:
+                  content: "40.7128,-74.0060"
+                  type: "location"
+                  metadata:
+                    latitude: 40.7128
+                    longitude: -74.0060
+                    address: "New York, NY, USA"
+      responses:
+        '201':
+          description: Message sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              examples:
+                success:
+                  summary: Successful message send
+                  value:
+                    success: true
+                    data:
+                      message:
+                        id: "msg-uuid-3"
+                        conversation_id: "conv-uuid-1"
+                        sender_id: "user-uuid-1"
+                        content: "Hey! How are you?"
+                        type: "text"
+                        created_at: "2025-01-01T12:10:00Z"
+                        updated_at: "2025-01-01T12:10:00Z"
+                        is_read: false
+                        metadata: {}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /chats/{conversationId}/read:
+    post:
+      tags:
+        - Chat
+      summary: Mark messages as read
+      description: |
+        Mark all messages in a conversation as read.
+        
+        ## Read Status Process
+        1. Client provides valid JWT token and conversation ID
+        2. System validates token and conversation access
+        3. Messages up to specified ID are marked as read
+        4. Read receipts are generated for sender
+        5. Real-time updates sent via WebSocket
+        6. Read status is synchronized across devices
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Conversation access verification
+        - Rate limiting: 60 requests per minute per authenticated user
+        - Read receipt privacy controls
+        - Cross-device synchronization
+        - Read status audit logging
+        - Privacy setting enforcement
+      operationId: markMessagesAsRead
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          description: Conversation ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkReadRequest'
+            examples:
+              success:
+                summary: Mark messages as read
+                value:
+                  message_id: "msg-uuid-2"
+      responses:
+        '200':
+          description: Messages marked as read successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                success:
+                  summary: Successful mark as read
+                  value:
+                    success: true
+                    message: "Messages marked as read"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /chats/{conversationId}/messages/{messageId}:
+    delete:
+      tags:
+        - Chat
+      summary: Delete a message
+      description: |
+        Delete a specific message from a conversation.
+        
+        ## Message Deletion Process
+        1. Client provides valid JWT token and message ID
+        2. System validates token and message ownership
+        3. Message is soft-deleted (marked as deleted)
+        4. Deletion is propagated to other participants
+        5. Real-time updates sent via WebSocket
+        6. Deletion is logged for audit purposes
+        
+        ## Security Features
+        - JWT token validation with expiry checking
+        - Message ownership verification
+        - Rate limiting: 20 requests per minute per authenticated user
+        - Soft deletion with audit trail
+        - Cross-participant synchronization
+        - Deletion reason tracking
+        - Privacy protection for deleted content
+      operationId: deleteMessage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          description: Conversation ID
+          schema:
+            type: string
+            format: uuid
+        - name: messageId
+          in: path
+          required: true
+          description: Message ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Message deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                success:
+                  summary: Successful message deletion
+                  value:
+                    success: true
+                    message: "Message deleted successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /ws:
+    get:
+      tags:
+        - WebSocket
+      summary: WebSocket connection for real-time chat
+      description: |
+        Establish WebSocket connection for real-time messaging.
+        
+        ## WebSocket Connection Process
+        1. Client provides JWT token in Authorization header
+        2. System validates token and establishes connection
+        3. Connection is associated with user ID
+        4. Real-time events are streamed to client
+        5. Connection health is monitored
+        6. Automatic reconnection is supported
+        
+        ## Security Features
+        - JWT token validation for connection establishment
+        - Rate limiting: 5 connections per minute per authenticated user
+        - Connection monitoring and health checks
+        - Message encryption over WebSocket
+        - Connection authentication persistence
+        - Automatic connection cleanup
+        - DDoS protection for WebSocket endpoints
+        - Message delivery confirmation
+      operationId: websocketConnect
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          description: Bearer token for authentication
+          schema:
+            type: string
+          example: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '101':
+          description: WebSocket connection established
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    StartConversationRequest:
+      type: object
+      required:
+        - match_id
+        - initial_message
+      properties:
+        match_id:
+          type: string
+          format: uuid
+          description: Match ID to start conversation with
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        initial_message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Initial message to send
+          example: "Hey! I noticed we matched. How are you?"
+
+    SendMessageRequest:
+      type: object
+      required:
+        - content
+        - type
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Message content (text, URL for photos, coordinates for location)
+          example: "Hey! How are you?"
+        type:
+          type: string
+          enum: [text, photo, photo_ephemeral, location, system, gift]
+          description: Message type
+          example: "text"
+        metadata:
+          type: object
+          description: Additional metadata for the message
+          properties:
+            width:
+              type: integer
+              description: Photo width (for photo messages)
+              example: 800
+            height:
+              type: integer
+              description: Photo height (for photo messages)
+              example: 600
+            size:
+              type: integer
+              description: Photo size in bytes (for photo messages)
+              example: 1024000
+            latitude:
+              type: number
+              format: float
+              description: Latitude (for location messages)
+              example: 40.7128
+            longitude:
+              type: number
+              format: float
+              description: Longitude (for location messages)
+              example: -74.0060
+            address:
+              type: string
+              description: Address (for location messages)
+              example: "New York, NY, USA"
+            duration:
+              type: integer
+              description: Duration in seconds (for ephemeral photos)
+              example: 10
+
+    MarkReadRequest:
+      type: object
+      required:
+        - message_id
+      properties:
+        message_id:
+          type: string
+          format: uuid
+          description: Message ID to mark as read (marks all messages up to this one as read)
+          example: "123e4567-e89b-12d3-a456-426614174000"
+
+    ConversationsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            conversations:
+              type: array
+              items:
+                $ref: '#/components/schemas/Conversation'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+
+    ConversationResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            conversation:
+              $ref: '#/components/schemas/Conversation'
+
+    MessagesResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            messages:
+              type: array
+              items:
+                $ref: '#/components/schemas/Message'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+
+    MessageResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            message:
+              $ref: '#/components/schemas/Message'
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Operation successful"
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "Invalid input data"
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    example: "content"
+                  message:
+                    type: string
+                    example: "Message content is required"
+
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        match_id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174001"
+        other_user:
+          $ref: '#/components/schemas/User'
+        last_message:
+          $ref: '#/components/schemas/Message'
+        unread_count:
+          type: integer
+          example: 3
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T12:00:00Z"
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        conversation_id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174001"
+        sender_id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174002"
+        content:
+          type: string
+          example: "Hey! How are you?"
+        type:
+          type: string
+          enum: [text, photo, photo_ephemeral, location, system, gift]
+          example: "text"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T12:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T12:00:00Z"
+        is_read:
+          type: boolean
+          example: false
+        metadata:
+          type: object
+          example: {}
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        username:
+          type: string
+          example: "jane_doe"
+        avatar_url:
+          type: string
+          format: uri
+          example: "https://example.com/avatar.jpg"
+        is_online:
+          type: boolean
+          example: true
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 100
+        total_pages:
+          type: integer
+          example: 5
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            bad_request:
+              summary: Bad request error
+              value:
+                success: false
+                error:
+                  code: "BAD_REQUEST"
+                  message: "Invalid request data"
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            unauthorized:
+              summary: Unauthorized error
+              value:
+                success: false
+                error:
+                  code: "UNAUTHORIZED"
+                  message: "Invalid or missing authentication token"
+
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            forbidden:
+              summary: Forbidden error
+              value:
+                success: false
+                error:
+                  code: "FORBIDDEN"
+                  message: "Access to this resource is forbidden"
+
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            not_found:
+              summary: Not found error
+              value:
+                success: false
+                error:
+                  code: "NOT_FOUND"
+                  message: "Conversation or message not found"
+
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            validation_error:
+              summary: Validation error
+              value:
+                success: false
+                error:
+                  code: "VALIDATION_ERROR"
+                  message: "Invalid input data"
+                  details:
+                    - field: "content"
+                      message: "Message content is required"
+                    - field: "type"
+                      message: "Invalid message type"
+
+    TooManyRequests:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            rate_limit:
+              summary: Rate limit error
+              value:
+                success: false
+                error:
+                  code: "TOO_MANY_REQUESTS"
+                  message: "Rate limit exceeded. Please try again later."
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            internal_error:
+              summary: Internal server error
+              value:
+                success: false
+                error:
+                  code: "INTERNAL_SERVER_ERROR"
+                  message: "An unexpected error occurred"
+
+tags:
+  - name: Chat
+    description: Chat and messaging endpoints
+  - name: WebSocket
+    description: WebSocket endpoints for real-time communication

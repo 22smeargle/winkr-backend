@@ -1,0 +1,4231 @@
+openapi: 3.0.3
+info:
+  title: Winkr API
+  description: |
+    Comprehensive API documentation for the Winkr dating application backend.
+    
+    The Winkr API provides access to all features of the Winkr dating platform, including:
+    - User authentication and profile management
+    - Advanced matching and discovery algorithms
+    - Real-time messaging with WebSocket support
+    - AI-powered user verification
+    - Photo management and ephemeral photos
+    - Payment processing and subscription management
+    - Content moderation and admin tools
+    
+    ## Authentication
+    
+    The API uses JWT (JSON Web Tokens) for authentication. Include the access token in the Authorization header:
+    
+    ```
+    Authorization: Bearer <access_token>
+    ```
+    
+    ## Rate Limiting
+    
+    All endpoints are rate-limited to ensure fair usage. Rate limit headers are included in all responses:
+    
+    - `X-RateLimit-Limit`: Maximum requests per time window
+    - `X-RateLimit-Remaining`: Remaining requests in current window
+    - `X-RateLimit-Reset`: Time when rate limit resets (Unix timestamp)
+    
+    ## Error Handling
+    
+    The API uses standard HTTP status codes and provides detailed error information in the response body.
+    
+    ## WebSocket
+    
+    Real-time features are available through WebSocket connections at:
+    
+    ```
+    wss://api.winkr.com/ws
+    ```
+    
+    See [WebSocket Events Documentation](websocket_events.md) for details.
+  version: 1.0.0
+  contact:
+    name: Winkr API Support
+    email: api@winkr.com
+    url: https://docs.winkr.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+  - url: https://api.winkr.com/v1
+    description: Production server
+  - url: https://staging-api.winkr.com/v1
+    description: Staging server
+  - url: http://localhost:8080/v1
+    description: Development server
+
+# Security Schemes
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token obtained from authentication endpoints
+
+  # Common Schemas
+  schemas:
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              example: Invalid input data
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+
+    Success:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+
+    Pagination:
+      type: object
+      properties:
+        limit:
+          type: integer
+          example: 20
+        offset:
+          type: integer
+          example: 0
+        total:
+          type: integer
+          example: 100
+        hasMore:
+          type: boolean
+          example: true
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        username:
+          type: string
+          example: "johndoe"
+        first_name:
+          type: string
+          example: "John"
+        last_name:
+          type: string
+          example: "Doe"
+        date_of_birth:
+          type: string
+          format: date
+          example: "1990-01-01"
+        gender:
+          type: string
+          enum: [male, female, other]
+          example: "male"
+        bio:
+          type: string
+          example: "Love hiking and outdoor adventures"
+        location:
+          $ref: '#/components/schemas/Location'
+        verification_status:
+          type: string
+          enum: [none, pending, approved, rejected]
+          example: "approved"
+        verification_level:
+          type: integer
+          enum: [0, 1, 2]
+          example: 2
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+
+    Location:
+      type: object
+      properties:
+        latitude:
+          type: number
+          format: float
+          example: 40.7128
+        longitude:
+          type: number
+          format: float
+          example: -74.0060
+        city:
+          type: string
+          example: "New York"
+        country:
+          type: string
+          example: "United States"
+
+    Photo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        user_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        url:
+          type: string
+          format: uri
+          example: "https://cdn.winkr.com/photos/abc123.jpg"
+        thumbnail_url:
+          type: string
+          format: uri
+          example: "https://cdn.winkr.com/photos/thumbnails/abc123.jpg"
+        is_primary:
+          type: boolean
+          example: false
+        order:
+          type: integer
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+
+    Match:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        user_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        matched_user_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+        user:
+          $ref: '#/components/schemas/User'
+        matched_user:
+          $ref: '#/components/schemas/User'
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        conversation_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        sender_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        content:
+          type: string
+          example: "Hey! How are you?"
+        type:
+          type: string
+          enum: [text, photo, photo_ephemeral, location, system, gift]
+          example: "text"
+        metadata:
+          type: object
+          example: {}
+        is_read:
+          type: boolean
+          example: false
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        user_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        other_user_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        last_message:
+          $ref: '#/components/schemas/Message'
+        unread_count:
+          type: integer
+          example: 3
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+        other_user:
+          $ref: '#/components/schemas/User'
+
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        user_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        plan_id:
+          type: string
+          example: "price_premium_monthly"
+        plan_name:
+          type: string
+          example: "Premium"
+        status:
+          type: string
+          enum: [trialing, active, past_due, canceled, unpaid]
+          example: "active"
+        current_period_start:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+        current_period_end:
+          type: string
+          format: date-time
+          example: "2025-02-01T00:00:00Z"
+        cancel_at_period_end:
+          type: boolean
+          example: false
+        stripe_subscription_id:
+          type: string
+          example: "sub_1O2x3a2eZvKYlo2C5Zl3xY2a"
+        stripe_customer_id:
+          type: string
+          example: "cus_1O2x3a2eZvKYlo2C5Zl3xY2a"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+
+    Verification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        user_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        type:
+          type: string
+          enum: [selfie, document]
+          example: "selfie"
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+          example: "approved"
+        photo_url:
+          type: string
+          format: uri
+          example: "https://storage.example.com/verification.jpg"
+        ai_score:
+          type: number
+          format: float
+          example: 0.92
+        ai_details:
+          type: object
+          example: {}
+        reviewed_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+        expires_at:
+          type: string
+          format: date-time
+          example: "2024-01-01T00:00:00Z"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+
+    EphemeralPhoto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        user_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        conversation_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        photo_url:
+          type: string
+          format: uri
+          example: "https://storage.example.com/ephemeral.jpg"
+        thumbnail_url:
+          type: string
+          format: uri
+          example: "https://storage.example.com/thumbnails/ephemeral.jpg"
+        view_count:
+          type: integer
+          example: 0
+        max_views:
+          type: integer
+          example: 1
+        expires_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T01:00:00Z"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        reporter_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        reported_user_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        reason:
+          type: string
+          enum: [inappropriate_content, harassment, fake_profile, spam, other]
+          example: "inappropriate_content"
+        description:
+          type: string
+          example: "User posted inappropriate content"
+        status:
+          type: string
+          enum: [pending, reviewed, resolved, dismissed]
+          example: "pending"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-01-01T00:00:00Z"
+
+# Authentication Endpoints
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: Create a new user account with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - username
+                - date_of_birth
+                - gender
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "user@example.com"
+                password:
+                  type: string
+                  minLength: 8
+                  example: "SecurePass123!"
+                username:
+                  type: string
+                  minLength: 3
+                  maxLength: 30
+                  example: "johndoe"
+                date_of_birth:
+                  type: string
+                  format: date
+                  example: "1990-01-01"
+                gender:
+                  type: string
+                  enum: [male, female, other]
+                  example: "male"
+                first_name:
+                  type: string
+                  example: "John"
+                last_name:
+                  type: string
+                  example: "Doe"
+                device_info:
+                  type: object
+                  properties:
+                    device_id:
+                      type: string
+                      example: "unique-device-id"
+                    device_type:
+                      type: string
+                      enum: [mobile, web, desktop]
+                      example: "mobile"
+                    os:
+                      type: string
+                      example: "iOS 15.0"
+                    app_version:
+                      type: string
+                      example: "1.0.0"
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          user:
+                            $ref: '#/components/schemas/User'
+                          tokens:
+                            type: object
+                            properties:
+                              access_token:
+                                type: string
+                                example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                              refresh_token:
+                                type: string
+                                example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                              expires_in:
+                                type: integer
+                                example: 3600
+                          device:
+                            type: object
+                            properties:
+                              id:
+                                type: string
+                                example: "device-uuid"
+                              is_new:
+                                type: boolean
+                                example: true
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict - user already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate user and return access tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "user@example.com"
+                password:
+                  type: string
+                  example: "SecurePass123!"
+                device_info:
+                  type: object
+                  properties:
+                    device_id:
+                      type: string
+                      example: "unique-device-id"
+                    device_type:
+                      type: string
+                      enum: [mobile, web, desktop]
+                      example: "mobile"
+                    os:
+                      type: string
+                      example: "iOS 15.0"
+                    app_version:
+                      type: string
+                      example: "1.0.0"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          user:
+                            $ref: '#/components/schemas/User'
+                          tokens:
+                            type: object
+                            properties:
+                              access_token:
+                                type: string
+                                example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                              refresh_token:
+                                type: string
+                                example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                              expires_in:
+                                type: integer
+                                example: 3600
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - account locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: Get new access token using refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+                  example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          access_token:
+                            type: string
+                            example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                          refresh_token:
+                            type: string
+                            example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                          expires_in:
+                            type: integer
+                            example: 3600
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: Invalidate access and refresh tokens
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+                  example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                device_id:
+                  type: string
+                  example: "device-uuid"
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/send-verification:
+    post:
+      tags:
+        - Authentication
+      summary: Send verification code
+      description: Send email or phone verification code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "user@example.com"
+      responses:
+        '200':
+          description: Verification code sent successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/verify:
+    post:
+      tags:
+        - Authentication
+      summary: Verify email/phone
+      description: Verify email or phone with code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - code
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "user@example.com"
+                code:
+                  type: string
+                  pattern: '^[0-9]{6}$'
+                  example: "123456"
+      responses:
+        '200':
+          description: Verification successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/password-reset:
+    post:
+      tags:
+        - Authentication
+      summary: Request password reset
+      description: Send password reset code to email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "user@example.com"
+      responses:
+        '200':
+          description: Password reset code sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/password-reset/confirm:
+    post:
+      tags:
+        - Authentication
+      summary: Confirm password reset
+      description: Reset password with verification code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - code
+                - new_password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "user@example.com"
+                code:
+                  type: string
+                  pattern: '^[0-9]{6}$'
+                  example: "123456"
+                new_password:
+                  type: string
+                  minLength: 8
+                  example: "NewSecurePass123!"
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+# Profile Endpoints
+  /profile/me:
+    get:
+      tags:
+        - Profile
+      summary: Get current user profile
+      description: Retrieve the authenticated user's profile information
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags:
+        - Profile
+      summary: Update user profile
+      description: Update the authenticated user's profile information
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                first_name:
+                  type: string
+                  example: "John"
+                last_name:
+                  type: string
+                  example: "Doe"
+                bio:
+                  type: string
+                  maxLength: 500
+                  example: "Love hiking and outdoor adventures"
+                location:
+                  $ref: '#/components/schemas/Location'
+                preferences:
+                  type: object
+                  properties:
+                    age_min:
+                      type: integer
+                      minimum: 18
+                      maximum: 100
+                      example: 25
+                    age_max:
+                      type: integer
+                      minimum: 18
+                      maximum: 100
+                      example: 35
+                    max_distance:
+                      type: integer
+                      minimum: 1
+                      maximum: 100
+                      example: 50
+                    interested_in:
+                      type: array
+                      items:
+                        type: string
+                        enum: [male, female, other]
+                      example: ["female"]
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /profile/{id}:
+    get:
+      tags:
+        - Profile
+      summary: Get user profile by ID
+      description: Retrieve a user's public profile information
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /profile/preferences:
+    post:
+      tags:
+        - Profile
+      summary: Update matching preferences
+      description: Update user's matching preferences
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                age_min:
+                  type: integer
+                  minimum: 18
+                  maximum: 100
+                  example: 25
+                age_max:
+                  type: integer
+                  minimum: 18
+                  maximum: 100
+                  example: 35
+                max_distance:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  example: 50
+                interested_in:
+                  type: array
+                  items:
+                    type: string
+                    enum: [male, female, other]
+                  example: ["female"]
+      responses:
+        '200':
+          description: Preferences updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+# Photo Endpoints
+  /photos:
+    get:
+      tags:
+        - Photos
+      summary: Get user photos
+      description: Retrieve the authenticated user's photos
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Photos retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Photo'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Photos
+      summary: Upload photo
+      description: Upload a new photo for the authenticated user
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - photo
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                is_primary:
+                  type: boolean
+                  example: false
+      responses:
+        '201':
+          description: Photo uploaded successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Photo'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Payload too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /photos/upload-url:
+    post:
+      tags:
+        - Photos
+      summary: Get photo upload URL
+      description: Get a secure upload URL for photo upload
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                filename:
+                  type: string
+                  example: "profile.jpg"
+                content_type:
+                  type: string
+                  example: "image/jpeg"
+      responses:
+        '200':
+          description: Upload URL generated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          upload_url:
+                            type: string
+                            format: uri
+                            example: "https://storage.example.com/upload/abc123"
+                          photo_id:
+                            type: string
+                            format: uuid
+                            example: "550e8400-e29b-41d4-a716-446655440000"
+                          expires_at:
+                            type: string
+                            format: date-time
+                            example: "2025-01-01T01:00:00Z"
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /photos/{id}:
+    delete:
+      tags:
+        - Photos
+      summary: Delete photo
+      description: Delete a user's photo
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Photo deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '404':
+          description: Photo not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /photos/{id}/primary:
+    put:
+      tags:
+        - Photos
+      summary: Set primary photo
+      description: Set a photo as the user's primary photo
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Primary photo set successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '404':
+          description: Photo not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /photos/{id}/viewed:
+    post:
+      tags:
+        - Photos
+      summary: Mark photo as viewed
+      description: Mark a photo as viewed by the authenticated user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Photo marked as viewed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '404':
+          description: Photo not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+# Discovery Endpoints
+  /discovery/users:
+    get:
+      tags:
+        - Discovery
+      summary: Get potential matches
+      description: Get a list of potential matches based on user preferences
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+      responses:
+        '200':
+          description: Potential matches retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          users:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/User'
+                          pagination:
+                            $ref: '#/components/schemas/Pagination'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /discovery/swipe:
+    post:
+      tags:
+        - Discovery
+      summary: Swipe on a user
+      description: Swipe left (pass) or right (like) on a user
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - user_id
+                - action
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                action:
+                  type: string
+                  enum: [like, pass]
+                  example: "like"
+      responses:
+        '200':
+          description: Swipe recorded successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          match:
+                            $ref: '#/components/schemas/Match'
+                          is_new_match:
+                            type: boolean
+                            example: true
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /discovery/matches:
+    get:
+      tags:
+        - Discovery
+      summary: Get user matches
+      description: Get a list of the authenticated user's matches
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+      responses:
+        '200':
+          description: Matches retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          matches:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Match'
+                          pagination:
+                            $ref: '#/components/schemas/Pagination'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /discovery/boost:
+    post:
+      tags:
+        - Discovery
+      summary: Boost profile visibility
+      description: Boost the user's profile visibility for a limited time
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                duration_minutes:
+                  type: integer
+                  minimum: 15
+                  maximum: 60
+                  default: 30
+                  example: 30
+      responses:
+        '200':
+          description: Profile boosted successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          boost_id:
+                            type: string
+                            format: uuid
+                            example: "550e8400-e29b-41d4-a716-446655440000"
+                          expires_at:
+                            type: string
+                            format: date-time
+                            example: "2025-01-01T00:30:00Z"
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '402':
+          description: Payment required - no boosts available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+# Chat Endpoints
+  /chat/conversations:
+    get:
+      tags:
+        - Chat
+      summary: Get user conversations
+      description: Get a list of the authenticated user's conversations
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+      responses:
+        '200':
+          description: Conversations retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          conversations:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Conversation'
+                          pagination:
+                            $ref: '#/components/schemas/Pagination'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Chat
+      summary: Start new conversation
+      description: Start a new conversation with a matched user
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - user_id
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                message:
+                  type: string
+                  maxLength: 2000
+                  example: "Hey! How are you?"
+      responses:
+        '201':
+          description: Conversation started successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Conversation'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - not matched with user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /chat/conversations/{id}:
+    get:
+      tags:
+        - Chat
+      summary: Get conversation details
+      description: Get details of a specific conversation
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Conversation retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Conversation'
+        '404':
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /chat/conversations/{id}/messages:
+    get:
+      tags:
+        - Chat
+      summary: Get conversation messages
+      description: Get messages from a specific conversation
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          example: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+        - name: before
+          in: query
+          schema:
+            type: string
+            format: date-time
+          example: "2025-01-01T00:00:00Z"
+      responses:
+        '200':
+          description: Messages retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          messages:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Message'
+                          pagination:
+                            $ref: '#/components/schemas/Pagination'
+        '404':
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Chat
+      summary: Send message
+      description: Send a message to a conversation
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+                - type
+              properties:
+                content:
+                  type: string
+                  maxLength: 2000
+                  example: "Hey! How are you?"
+                type:
+                  type: string
+                  enum: [text, photo, photo_ephemeral, location, system, gift]
+                  example: "text"
+                metadata:
+                  type: object
+                  example: {}
+      responses:
+        '201':
+          description: Message sent successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Message'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /chat/conversations/{id}/read:
+    post:
+      tags:
+        - Chat
+      summary: Mark conversation as read
+      description: Mark all messages in a conversation as read
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Conversation marked as read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '404':
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+# Verification Endpoints
+  /verify/selfie/request:
+    post:
+      tags:
+        - Verification
+      summary: Request selfie verification
+      description: Initiate selfie verification process
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Selfie verification request created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          verification_id:
+                            type: string
+                            format: uuid
+                            example: "550e8400-e29b-41d4-a716-446655440000"
+                          upload_url:
+                            type: string
+                            format: uri
+                            example: "https://storage.example.com/upload/abc123"
+                          expires_at:
+                            type: string
+                            format: date-time
+                            example: "2025-01-01T01:00:00Z"
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /verify/selfie/submit:
+    post:
+      tags:
+        - Verification
+      summary: Submit selfie verification
+      description: Submit selfie for AI-powered verification
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - photo
+                - verification_id
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                verification_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Selfie submitted for verification
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Verification'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /verify/selfie/status:
+    get:
+      tags:
+        - Verification
+      summary: Get selfie verification status
+      description: Get the status of selfie verification
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Verification status retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Verification'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /verify/document/request:
+    post:
+      tags:
+        - Verification
+      summary: Request document verification
+      description: Initiate document verification process
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - document_type
+              properties:
+                document_type:
+                  type: string
+                  enum: [id_card, passport, driver_license]
+                  example: "passport"
+      responses:
+        '200':
+          description: Document verification request created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          verification_id:
+                            type: string
+                            format: uuid
+                            example: "550e8400-e29b-41d4-a716-446655440000"
+                          upload_url:
+                            type: string
+                            format: uri
+                            example: "https://storage.example.com/upload/abc123"
+                          expires_at:
+                            type: string
+                            format: date-time
+                            example: "2025-01-01T01:00:00Z"
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /verify/document/submit:
+    post:
+      tags:
+        - Verification
+      summary: Submit document verification
+      description: Submit document for AI-powered verification
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - photo
+                - verification_id
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                verification_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Document submitted for verification
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Verification'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /verify/document/status:
+    get:
+      tags:
+        - Verification
+      summary: Get document verification status
+      description: Get the status of document verification
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Verification status retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Verification'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+# Ephemeral Photos Endpoints
+  /ephemeral-photos:
+    get:
+      tags:
+        - Ephemeral Photos
+      summary: Get user ephemeral photos
+      description: Get the authenticated user's ephemeral photos
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Ephemeral photos retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EphemeralPhoto'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Ephemeral Photos
+      summary: Upload ephemeral photo
+      description: Upload a new ephemeral photo
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - photo
+                - conversation_id
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                conversation_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                max_views:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  default: 1
+                  example: 1
+                expires_after_hours:
+                  type: integer
+                  minimum: 1
+                  maximum: 24
+                  default: 1
+                  example: 1
+      responses:
+        '201':
+          description: Ephemeral photo uploaded successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/EphemeralPhoto'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ephemeral-photos/{id}:
+    get:
+      tags:
+        - Ephemeral Photos
+      summary: View ephemeral photo
+      description: View an ephemeral photo (increments view count)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Ephemeral photo retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/EphemeralPhoto'
+        '404':
+          description: Ephemeral photo not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Ephemeral Photos
+      summary: Delete ephemeral photo
+      description: Delete an ephemeral photo
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Ephemeral photo deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '404':
+          description: Ephemeral photo not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ephemeral-photos/{id}/status:
+    get:
+      tags:
+        - Ephemeral Photos
+      summary: Get ephemeral photo status
+      description: Get the status of an ephemeral photo
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Ephemeral photo status retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/EphemeralPhoto'
+        '404':
+          description: Ephemeral photo not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+# Moderation Endpoints
+  /moderation/report:
+    post:
+      tags:
+        - Moderation
+      summary: Report user or content
+      description: Report a user or content for moderation
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reported_user_id
+                - reason
+              properties:
+                reported_user_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                reason:
+                  type: string
+                  enum: [inappropriate_content, harassment, fake_profile, spam, other]
+                  example: "inappropriate_content"
+                description:
+                  type: string
+                  maxLength: 1000
+                  example: "User posted inappropriate content"
+                content_type:
+                  type: string
+                  enum: [message, photo, profile]
+                  example: "message"
+                content_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '201':
+          description: Report submitted successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Report'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /moderation/blocked-users:
+    get:
+      tags:
+        - Moderation
+      summary: Get blocked users
+      description: Get a list of users blocked by the authenticated user
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Blocked users retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /moderation/block-user:
+    post:
+      tags:
+        - Moderation
+      summary: Block user
+      description: Block a user
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - user_id
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                reason:
+                  type: string
+                  maxLength: 500
+                  example: "Inappropriate behavior"
+      responses:
+        '201':
+          description: User blocked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /moderation/unblock-user/{id}:
+    delete:
+      tags:
+        - Moderation
+      summary: Unblock user
+      description: Unblock a user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: User unblocked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '404':
+          description: User not found or not blocked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+# Payment Endpoints
+  /plans:
+    get:
+      tags:
+        - Payments
+      summary: Get available plans
+      description: Get a list of available subscription plans
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Plans retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              example: "price_premium_monthly"
+                            name:
+                              type: string
+                              example: "Premium"
+                            description:
+                              type: string
+                              example: "Enhanced features for serious dating"
+                            amount:
+                              type: integer
+                              example: 999
+                            currency:
+                              type: string
+                              example: "usd"
+                            interval:
+                              type: string
+                              example: "month"
+                            trialPeriodDays:
+                              type: integer
+                              example: 7
+                            features:
+                              type: array
+                              items:
+                                type: string
+                              example: ["Unlimited swipes", "Advanced profile", "Read receipts"]
+                            isActive:
+                              type: boolean
+                              example: true
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /subscribe:
+    post:
+      tags:
+        - Payments
+      summary: Create subscription
+      description: Create a new subscription
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - planId
+                - paymentMethodId
+              properties:
+                planId:
+                  type: string
+                  example: "price_premium_monthly"
+                paymentMethodId:
+                  type: string
+                  example: "pm_1O2x3a2eZvKYlo2C5Zl3xY2a"
+                trialPeriodDays:
+                  type: integer
+                  example: 7
+      responses:
+        '201':
+          description: Subscription created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Subscription'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '402':
+          description: Payment required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict - active subscription exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /subscription/update:
+    put:
+      tags:
+        - Payments
+      summary: Update subscription
+      description: Update an existing subscription
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - planId
+              properties:
+                planId:
+                  type: string
+                  example: "price_platinum_monthly"
+                prorationBehavior:
+                  type: string
+                  enum: [create_prorations, none]
+                  example: "create_prorations"
+      responses:
+        '200':
+          description: Subscription updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Subscription'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /subscription/cancel:
+    post:
+      tags:
+        - Payments
+      summary: Cancel subscription
+      description: Cancel an active subscription
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cancelAtPeriodEnd:
+                  type: boolean
+                  example: true
+                reason:
+                  type: string
+                  maxLength: 500
+                  example: "Found a match"
+      responses:
+        '200':
+          description: Subscription canceled successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Subscription'
+        '404':
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /subscription/reactivate:
+    post:
+      tags:
+        - Payments
+      summary: Reactivate subscription
+      description: Reactivate a canceled subscription
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Subscription reactivated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Subscription'
+        '404':
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /payment/methods:
+    get:
+      tags:
+        - Payments
+      summary: Get payment methods
+      description: Get the authenticated user's payment methods
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Payment methods retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              example: "pm_1O2x3a2eZvKYlo2C5Zl3xY2a"
+                            userId:
+                              type: string
+                              format: uuid
+                              example: "550e8400-e29b-41d4-a716-446655440000"
+                            stripePaymentMethodId:
+                              type: string
+                              example: "pm_1O2x3a2eZvKYlo2C5Zl3xY2a"
+                            type:
+                              type: string
+                              example: "card"
+                            brand:
+                              type: string
+                              example: "visa"
+                            last4:
+                              type: string
+                              example: "4242"
+                            expMonth:
+                              type: integer
+                              example: 12
+                            expYear:
+                              type: integer
+                              example: 2025
+                            country:
+                              type: string
+                              example: "US"
+                            isDefault:
+                              type: boolean
+                              example: true
+                            createdAt:
+                              type: string
+                              format: date-time
+                              example: "2025-01-01T00:00:00Z"
+                            updatedAt:
+                              type: string
+                              format: date-time
+                              example: "2025-01-01T00:00:00Z"
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Payments
+      summary: Add payment method
+      description: Add a new payment method
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - paymentMethodId
+              properties:
+                paymentMethodId:
+                  type: string
+                  example: "pm_1O2x3a2eZvKYlo2C5Zl3xY2a"
+                isDefault:
+                  type: boolean
+                  example: false
+      responses:
+        '201':
+          description: Payment method added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /payment/methods/{id}/default:
+    put:
+      tags:
+        - Payments
+      summary: Set default payment method
+      description: Set a payment method as default
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "pm_1O2x3a2eZvKYlo2C5Zl3xY2a"
+      responses:
+        '200':
+          description: Default payment method set successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '404':
+          description: Payment method not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /payment/methods/{id}:
+    delete:
+      tags:
+        - Payments
+      summary: Remove payment method
+      description: Remove a payment method
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "pm_1O2x3a2eZvKYlo2C5Zl3xY2a"
+      responses:
+        '200':
+          description: Payment method removed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '404':
+          description: Payment method not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /payment/history:
+    get:
+      tags:
+        - Payments
+      summary: Get payment history
+      description: Get the authenticated user's payment history
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [succeeded, failed, pending, refunded]
+          example: "succeeded"
+      responses:
+        '200':
+          description: Payment history retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          payments:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id:
+                                  type: string
+                                  example: "pay_1O2x3a2eZvKYlo2C5Zl3xY2a"
+                                userId:
+                                  type: string
+                                  format: uuid
+                                  example: "550e8400-e29b-41d4-a716-446655440000"
+                                stripePaymentIntentId:
+                                  type: string
+                                  example: "pi_1O2x3a2eZvKYlo2C5Zl3xY2a"
+                                amount:
+                                  type: integer
+                                  example: 999
+                                currency:
+                                  type: string
+                                  example: "usd"
+                                status:
+                                  type: string
+                                  example: "succeeded"
+                                paymentMethodId:
+                                  type: string
+                                  example: "pm_1O2x3a2eZvKYlo2C5Zl3xY2a"
+                                description:
+                                  type: string
+                                  example: "Premium subscription"
+                                createdAt:
+                                  type: string
+                                  format: date-time
+                                  example: "2025-01-01T00:00:00Z"
+                                updatedAt:
+                                  type: string
+                                  format: date-time
+                                  example: "2025-01-01T00:00:00Z"
+                          total:
+                            type: integer
+                            example: 15
+                          hasMore:
+                            type: boolean
+                            example: true
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /payment/invoices:
+    get:
+      tags:
+        - Payments
+      summary: Get invoices
+      description: Get the authenticated user's invoices
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [paid, open, void, uncollectible]
+          example: "paid"
+      responses:
+        '200':
+          description: Invoices retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          invoices:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id:
+                                  type: string
+                                  example: "in_1O2x3a2eZvKYlo2C5Zl3xY2a"
+                                userId:
+                                  type: string
+                                  format: uuid
+                                  example: "550e8400-e29b-41d4-a716-446655440000"
+                                stripeInvoiceId:
+                                  type: string
+                                  example: "in_1O2x3a2eZvKYlo2C5Zl3xY2a"
+                                subscriptionId:
+                                  type: string
+                                  format: uuid
+                                  example: "550e8400-e29b-41d4-a716-446655440000"
+                                status:
+                                  type: string
+                                  example: "paid"
+                                amount:
+                                  type: integer
+                                  example: 999
+                                currency:
+                                  type: string
+                                  example: "usd"
+                                dueDate:
+                                  type: string
+                                  format: date-time
+                                  example: "2025-02-01T00:00:00Z"
+                                paidAt:
+                                  type: string
+                                  format: date-time
+                                  example: "2025-01-01T00:00:00Z"
+                                hostedInvoiceUrl:
+                                  type: string
+                                  format: uri
+                                  example: "https://invoice.stripe.com/invoice/acct_1O2x3a2eZvKYlo2C5Zl3xY2a"
+                                invoicePdf:
+                                  type: string
+                                  format: uri
+                                  example: "https://invoice.stripe.com/invoice/acct_1O2x3a2eZvKYlo2C5Zl3xY2a/pdf"
+                                createdAt:
+                                  type: string
+                                  format: date-time
+                                  example: "2025-01-01T00:00:00Z"
+                                updatedAt:
+                                  type: string
+                                  format: date-time
+                                  example: "2025-01-01T00:00:00Z"
+                          total:
+                            type: integer
+                            example: 12
+                          hasMore:
+                            type: boolean
+                            example: true
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /payment/invoices/{id}:
+    get:
+      tags:
+        - Payments
+      summary: Get invoice details
+      description: Get details of a specific invoice
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "in_1O2x3a2eZvKYlo2C5Zl3xY2a"
+      responses:
+        '200':
+          description: Invoice details retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            example: "in_1O2x3a2eZvKYlo2C5Zl3xY2a"
+                          userId:
+                            type: string
+                            format: uuid
+                            example: "550e8400-e29b-41d4-a716-446655440000"
+                          stripeInvoiceId:
+                            type: string
+                            example: "in_1O2x3a2eZvKYlo2C5Zl3xY2a"
+                          subscriptionId:
+                            type: string
+                            format: uuid
+                            example: "550e8400-e29b-41d4-a716-446655440000"
+                          status:
+                            type: string
+                            example: "paid"
+                          amount:
+                            type: integer
+                            example: 999
+                          currency:
+                            type: string
+                            example: "usd"
+                          dueDate:
+                            type: string
+                            format: date-time
+                            example: "2025-02-01T00:00:00Z"
+                          paidAt:
+                            type: string
+                            format: date-time
+                            example: "2025-01-01T00:00:00Z"
+                          hostedInvoiceUrl:
+                            type: string
+                            format: uri
+                            example: "https://invoice.stripe.com/invoice/acct_1O2x3a2eZvKYlo2C5Zl3xY2a"
+                          invoicePdf:
+                            type: string
+                            format: uri
+                            example: "https://invoice.stripe.com/invoice/acct_1O2x3a2eZvKYlo2C5Zl3xY2a/pdf"
+                          createdAt:
+                            type: string
+                            format: date-time
+                            example: "2025-01-01T00:00:00Z"
+                          updatedAt:
+                            type: string
+                            format: date-time
+                            example: "2025-01-01T00:00:00Z"
+        '404':
+          description: Invoice not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /payment/webhook:
+    post:
+      tags:
+        - Payments
+      summary: Stripe webhook endpoint
+      description: Process Stripe webhook events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed successfully
+        '400':
+          description: Invalid webhook signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+# Admin Endpoints
+  /admin/dashboard:
+    get:
+      tags:
+        - Admin
+      summary: Get dashboard data
+      description: Get admin dashboard statistics and analytics
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Dashboard data retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          users:
+                            type: object
+                            properties:
+                              total:
+                                type: integer
+                                example: 10000
+                              active:
+                                type: integer
+                                example: 7500
+                              new_today:
+                                type: integer
+                                example: 50
+                          matches:
+                            type: object
+                            properties:
+                              total:
+                                type: integer
+                                example: 50000
+                              today:
+                                type: integer
+                                example: 200
+                          messages:
+                            type: object
+                            properties:
+                              total:
+                                type: integer
+                                example: 100000
+                              today:
+                                type: integer
+                                example: 500
+                          revenue:
+                            type: object
+                            properties:
+                              total:
+                                type: number
+                                example: 50000.00
+                              this_month:
+                                type: number
+                                example: 5000.00
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/users:
+    get:
+      tags:
+        - Admin
+      summary: Get users
+      description: Get a list of users with filtering and pagination
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, suspended, banned]
+          example: "active"
+        - name: verification_status
+          in: query
+          schema:
+            type: string
+            enum: [none, pending, approved, rejected]
+          example: "approved"
+        - name: search
+          in: query
+          schema:
+            type: string
+          example: "john"
+      responses:
+        '200':
+          description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          users:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/User'
+                          pagination:
+                            $ref: '#/components/schemas/Pagination'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/users/{id}:
+    get:
+      tags:
+        - Admin
+      summary: Get user details
+      description: Get detailed information about a specific user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: User details retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags:
+        - Admin
+      summary: Update user
+      description: Update user information
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [active, inactive, suspended, banned]
+                  example: "suspended"
+                verification_status:
+                  type: string
+                  enum: [none, pending, approved, rejected]
+                  example: "approved"
+                verification_level:
+                  type: integer
+                  enum: [0, 1, 2]
+                  example: 2
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/verifications:
+    get:
+      tags:
+        - Admin
+      summary: Get verifications
+      description: Get a list of verifications pending review
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+          example: "pending"
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [selfie, document]
+          example: "selfie"
+      responses:
+        '200':
+          description: Verifications retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          verifications:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Verification'
+                          total:
+                            type: integer
+                            example: 15
+                          limit:
+                            type: integer
+                            example: 20
+                          offset:
+                            type: integer
+                            example: 0
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/verifications/{id}:
+    get:
+      tags:
+        - Admin
+      summary: Get verification details
+      description: Get detailed information about a specific verification
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Verification details retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Verification'
+        '404':
+          description: Verification not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/verifications/{id}/approve:
+    post:
+      tags:
+        - Admin
+      summary: Approve verification
+      description: Approve a verification request
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+                  example: "User verified successfully"
+      responses:
+        '200':
+          description: Verification approved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          verification_id:
+                            type: string
+                            format: uuid
+                            example: "550e8400-e29b-41d4-a716-446655440000"
+                          status:
+                            type: string
+                            example: "approved"
+                          reviewed_at:
+                            type: string
+                            format: date-time
+                            example: "2025-01-01T00:00:00Z"
+                          message:
+                            type: string
+                            example: "Verification approved successfully"
+        '404':
+          description: Verification not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/verifications/{id}/reject:
+    post:
+      tags:
+        - Admin
+      summary: Reject verification
+      description: Reject a verification request
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+                  example: "Photo quality is too low"
+      responses:
+        '200':
+          description: Verification rejected successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          verification_id:
+                            type: string
+                            format: uuid
+                            example: "550e8400-e29b-41d4-a716-446655440000"
+                          status:
+                            type: string
+                            example: "rejected"
+                          reviewed_at:
+                            type: string
+                            format: date-time
+                            example: "2025-01-01T00:00:00Z"
+                          message:
+                            type: string
+                            example: "Verification rejected successfully"
+        '404':
+          description: Verification not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/reports:
+    get:
+      tags:
+        - Admin
+      summary: Get reports
+      description: Get a list of user reports
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, reviewed, resolved, dismissed]
+          example: "pending"
+        - name: reason
+          in: query
+          schema:
+            type: string
+            enum: [inappropriate_content, harassment, fake_profile, spam, other]
+          example: "inappropriate_content"
+      responses:
+        '200':
+          description: Reports retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          reports:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Report'
+                          pagination:
+                            $ref: '#/components/schemas/Pagination'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/reports/{id}:
+    get:
+      tags:
+        - Admin
+      summary: Get report details
+      description: Get detailed information about a specific report
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Report details retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Report'
+        '404':
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/reports/{id}/review:
+    post:
+      tags:
+        - Admin
+      summary: Review report
+      description: Review and resolve a report
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum: [resolve, dismiss]
+                  example: "resolve"
+                reason:
+                  type: string
+                  maxLength: 500
+                  example: "Content removed and user warned"
+      responses:
+        '200':
+          description: Report reviewed successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          report_id:
+                            type: string
+                            format: uuid
+                            example: "550e8400-e29b-41d4-a716-446655440000"
+                          status:
+                            type: string
+                            example: "resolved"
+                          reviewed_at:
+                            type: string
+                            format: date-time
+                            example: "2025-01-01T00:00:00Z"
+                          message:
+                            type: string
+                            example: "Report reviewed successfully"
+        '404':
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/analytics:
+    get:
+      tags:
+        - Admin
+      summary: Get analytics data
+      description: Get detailed analytics and metrics
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month, year]
+            default: "month"
+          example: "month"
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2025-01-01"
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2025-01-31"
+      responses:
+        '200':
+          description: Analytics data retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          user_metrics:
+                            type: object
+                            properties:
+                              new_users:
+                                type: integer
+                                example: 1000
+                              active_users:
+                                type: integer
+                                example: 5000
+                              retention_rate:
+                                type: number
+                                example: 0.75
+                          engagement_metrics:
+                            type: object
+                            properties:
+                              daily_swipes:
+                                type: integer
+                                example: 50000
+                              daily_matches:
+                                type: integer
+                                example: 5000
+                              daily_messages:
+                                type: integer
+                                example: 25000
+                          revenue_metrics:
+                            type: object
+                            properties:
+                              total_revenue:
+                                type: number
+                                example: 10000.00
+                              subscription_revenue:
+                                type: number
+                                example: 8000.00
+                              average_revenue_per_user:
+                                type: number
+                                example: 2.00
+        '401':
+          description: Unauthorized - invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+# Health Check Endpoint
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check the health status of the API
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2025-01-01T00:00:00Z"
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  services:
+                    type: object
+                    properties:
+                      database:
+                        type: string
+                        example: "healthy"
+                      redis:
+                        type: string
+                        example: "healthy"
+                      storage:
+                        type: string
+                        example: "healthy"
+
+tags:
+  - name: Authentication
+    description: User authentication and session management
+  - name: Profile
+    description: User profile management
+  - name: Photos
+    description: Photo upload and management
+  - name: Discovery
+    description: User discovery and matching
+  - name: Chat
+    description: Real-time messaging
+  - name: Verification
+    description: User verification with AI
+  - name: Ephemeral Photos
+    description: Self-destructing photo messages
+  - name: Moderation
+    description: Content moderation and reporting
+  - name: Payments
+    description: Subscription and payment management
+  - name: Admin
+    description: Administrative tools and analytics
+  - name: Health
+    description: System health checks

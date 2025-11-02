@@ -1,0 +1,3700 @@
+openapi: 3.0.3
+info:
+  title: WinKr Dating App - Admin API
+  description: |
+    Comprehensive administrative interface for managing the WinKr dating platform.
+    
+    ## Features
+    - User management with advanced filtering and bulk operations
+    - Real-time analytics and reporting
+    - System monitoring and health checks
+    - Content moderation and review tools
+    - Configuration management
+    - Security and access control
+    - Performance monitoring and alerting
+    
+    ## Security
+    - JWT-based authentication with role-based access control
+    - Multi-factor authentication support
+    - Audit logging for all administrative actions
+    - IP-based access restrictions
+    - Session management with automatic timeout
+    - Encrypted data transmission
+    
+    ## Rate Limiting
+    Admin endpoints have specific rate limits to prevent abuse:
+    - Authentication: 10 requests per minute, 100 per hour
+    - User operations: 20 requests per minute, 500 per hour
+    - Analytics queries: 30 requests per minute, 1000 per hour
+    - System operations: 15 requests per minute, 300 per hour
+    - Bulk operations: 5 requests per minute, 50 per hour
+    
+    ## Access Control
+    - Role-based permissions (Super Admin, Admin, Moderator, Support)
+    - Granular permission system for different operations
+    - Audit trail for all administrative actions
+    - IP whitelisting for enhanced security
+  version: 1.0.0
+  contact:
+    name: WinKr Admin Support
+    email: admin-support@winkr.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.winkr.com/admin/v1
+    description: Production server
+  - url: https://staging-api.winkr.com/admin/v1
+    description: Staging server
+  - url: http://localhost:8080/admin/v1
+    description: Development server
+
+security:
+  - BearerAuth: []
+
+paths:
+  # Authentication endpoints
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Admin login
+      description: |
+        Authenticate admin user and return JWT token with role-based permissions.
+        
+        **Security Features:**
+        - Multi-factor authentication support
+        - Brute force protection with exponential backoff
+        - Session management with secure cookies
+        - IP-based access logging
+        - Device fingerprinting
+        
+        **Rate Limit:** 10 requests per minute, 100 per hour
+        **Lockout Policy:** 5 failed attempts triggers 15-minute lockout
+      operationId: adminLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminLoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLoginResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many login attempts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Admin logout
+      description: Logout admin user and invalidate token
+      operationId: adminLogout
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh admin token
+      description: Refresh JWT token using refresh token
+      operationId: adminRefreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLoginResponse'
+        '401':
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current admin
+      description: Get current admin user information
+      operationId: getCurrentAdmin
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Admin information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # User Management endpoints
+  /users:
+    get:
+      tags:
+        - User Management
+      summary: List users
+      description: |
+        Retrieve paginated list of users with advanced filtering, sorting, and search capabilities.
+        
+        **Use Cases:**
+        - User management and support
+        - Analytics and reporting
+        - Compliance and moderation
+        - Bulk operations preparation
+        
+        **Filtering Options:**
+        - Status-based filtering (active, suspended, banned, deleted)
+        - Date range filtering
+        - Geographic filtering
+        - Subscription status filtering
+        - Verification status filtering
+        
+        **Rate Limit:** 20 requests per minute, 500 per hour
+      operationId: getUsers
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Number of users to return
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of users to skip
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: search
+          in: query
+          description: Search term for users
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by user status
+          required: false
+          schema:
+            type: string
+            enum: [active, suspended, banned, deleted]
+        - name: sort_by
+          in: query
+          description: Sort field
+          required: false
+          schema:
+            type: string
+            enum: [created_at, updated_at, username, email]
+            default: created_at
+        - name: sort_order
+          in: query
+          description: Sort order
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsersResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{userId}:
+    get:
+      tags:
+        - User Management
+      summary: Get user details
+      description: Retrieve detailed information about a specific user
+      operationId: getUserDetails
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDetailsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags:
+        - User Management
+      summary: Update user
+      description: Update user information
+      operationId: updateUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateUserResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - User Management
+      summary: Delete user
+      description: Delete user account (soft or hard delete)
+      operationId: deleteUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: string
+            format: uuid
+        - name: hard_delete
+          in: query
+          description: Perform hard delete (permanent)
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: User deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteUserResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{userId}/suspend:
+    post:
+      tags:
+        - User Management
+      summary: Suspend user
+      description: Suspend user account for specified duration
+      operationId: suspendUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuspendUserRequest'
+      responses:
+        '200':
+          description: User suspended successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuspendUserResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{userId}/unsuspend:
+    post:
+      tags:
+        - User Management
+      summary: Unsuspend user
+      description: Unsuspend user account
+      operationId: unsuspendUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User unsuspended successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuspendUserResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{userId}/ban:
+    post:
+      tags:
+        - User Management
+      summary: Ban user
+      description: Permanently ban user account
+      operationId: banUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BanUserRequest'
+      responses:
+        '200':
+          description: User banned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuspendUserResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{userId}/unban:
+    post:
+      tags:
+        - User Management
+      summary: Unban user
+      description: Unban user account
+      operationId: unbanUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User unbanned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuspendUserResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{userId}/activity:
+    get:
+      tags:
+        - User Management
+      summary: Get user activity
+      description: Retrieve activity log for a specific user
+      operationId: getUserActivity
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Number of activities to return
+          required: false
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of activities to skip
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: activity_type
+          in: query
+          description: Filter by activity type
+          required: false
+          schema:
+            type: string
+            enum: [login, logout, profile_update, photo_upload, message_sent, match_created]
+      responses:
+        '200':
+          description: User activity retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserActivityResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Bulk operations
+  /users/bulk/update:
+    post:
+      tags:
+        - User Management
+      summary: Bulk update users
+      description: Update multiple users at once
+      operationId: bulkUpdateUsers
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkUpdateUsersRequest'
+      responses:
+        '200':
+          description: Users updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkOperationResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/bulk/delete:
+    post:
+      tags:
+        - User Management
+      summary: Bulk delete users
+      description: Delete multiple users at once
+      operationId: bulkDeleteUsers
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkDeleteUsersRequest'
+      responses:
+        '200':
+          description: Users deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkOperationResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Analytics endpoints
+  /stats:
+    get:
+      tags:
+        - Analytics
+      summary: Get platform statistics
+      description: |
+        Retrieve comprehensive platform-wide statistics and performance metrics.
+        
+        **Available Metrics:**
+        - User growth and engagement
+        - Match and conversation statistics
+        - Revenue and subscription analytics
+        - System performance indicators
+        - Geographic distribution
+        - Device and platform usage
+        
+        **Data Aggregation:**
+        - Real-time data for recent periods
+        - Cached data for historical queries
+        - Pre-computed aggregates for performance
+        - Custom time range support
+        
+        **Rate Limit:** 30 requests per minute, 1000 per hour
+      operationId: getPlatformStats
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          description: Time period for statistics
+          required: true
+          schema:
+            type: string
+            enum: [1d, 7d, 30d, 90d, 1y]
+      responses:
+        '200':
+          description: Platform statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformStatsResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stats/users:
+    get:
+      tags:
+        - Analytics
+      summary: Get user statistics
+      description: Retrieve user-related statistics
+      operationId: getUserStats
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          description: Time period for statistics
+          required: true
+          schema:
+            type: string
+            enum: [1d, 7d, 30d, 90d, 1y]
+        - name: group_by
+          in: query
+          description: Group statistics by time period
+          required: true
+          schema:
+            type: string
+            enum: [day, week, month]
+      responses:
+        '200':
+          description: User statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserStatsResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stats/matches:
+    get:
+      tags:
+        - Analytics
+      summary: Get match statistics
+      description: Retrieve match-related statistics
+      operationId: getMatchStats
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          description: Time period for statistics
+          required: true
+          schema:
+            type: string
+            enum: [1d, 7d, 30d, 90d, 1y]
+        - name: group_by
+          in: query
+          description: Group statistics by time period
+          required: true
+          schema:
+            type: string
+            enum: [day, week, month]
+      responses:
+        '200':
+          description: Match statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchStatsResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stats/messages:
+    get:
+      tags:
+        - Analytics
+      summary: Get message statistics
+      description: Retrieve message-related statistics
+      operationId: getMessageStats
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          description: Time period for statistics
+          required: true
+          schema:
+            type: string
+            enum: [1d, 7d, 30d, 90d, 1y]
+        - name: group_by
+          in: query
+          description: Group statistics by time period
+          required: true
+          schema:
+            type: string
+            enum: [day, week, month]
+      responses:
+        '200':
+          description: Message statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageStatsResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stats/payments:
+    get:
+      tags:
+        - Analytics
+      summary: Get payment statistics
+      description: Retrieve payment-related statistics
+      operationId: getPaymentStats
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          description: Time period for statistics
+          required: true
+          schema:
+            type: string
+            enum: [1d, 7d, 30d, 90d, 1y]
+        - name: group_by
+          in: query
+          description: Group statistics by time period
+          required: true
+          schema:
+            type: string
+            enum: [day, week, month]
+      responses:
+        '200':
+          description: Payment statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentStatsResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stats/verification:
+    get:
+      tags:
+        - Analytics
+      summary: Get verification statistics
+      description: Retrieve verification-related statistics
+      operationId: getVerificationStats
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          description: Time period for statistics
+          required: true
+          schema:
+            type: string
+            enum: [1d, 7d, 30d, 90d, 1y]
+        - name: group_by
+          in: query
+          description: Group statistics by time period
+          required: true
+          schema:
+            type: string
+            enum: [day, week, month]
+        - name: verification_type
+          in: query
+          description: Filter by verification type
+          required: false
+          schema:
+            type: string
+            enum: [selfie, document, all]
+            default: all
+      responses:
+        '200':
+          description: Verification statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationStatsResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stats/dashboard:
+    get:
+      tags:
+        - Analytics
+      summary: Get dashboard data
+      description: Retrieve comprehensive dashboard data
+      operationId: getDashboardData
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Dashboard data retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardDataResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stats/export:
+    get:
+      tags:
+        - Analytics
+      summary: Export statistics
+      description: Export statistics data in various formats
+      operationId: exportStats
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          description: Type of data to export
+          required: true
+          schema:
+            type: string
+            enum: [users, matches, messages, payments, verification]
+        - name: format
+          in: query
+          description: Export format
+          required: true
+          schema:
+            type: string
+            enum: [csv, json, xlsx]
+        - name: period
+          in: query
+          description: Time period for export
+          required: true
+          schema:
+            type: string
+            enum: [1d, 7d, 30d, 90d, 1y]
+      responses:
+        '200':
+          description: Data exported successfully
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # System Management endpoints
+  /system/health:
+    get:
+      tags:
+        - System Management
+      summary: Get system health
+      description: |
+        Retrieve comprehensive system health status and performance metrics.
+        
+        **Health Indicators:**
+        - Service availability and response times
+        - Database connectivity and performance
+        - External service dependencies
+        - Resource utilization (CPU, memory, disk)
+        - Network connectivity and bandwidth
+        - Queue depths and processing rates
+        
+        **Alerting:**
+        - Real-time health monitoring
+        - Automated alert generation
+        - Health trend analysis
+        - Predictive failure detection
+        
+        **Rate Limit:** 15 requests per minute, 300 per hour
+      operationId: getSystemHealth
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: System health retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemHealthResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /system/metrics:
+    get:
+      tags:
+        - System Management
+      summary: Get system metrics
+      description: Retrieve detailed system performance metrics
+      operationId: getSystemMetrics
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: System metrics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemMetricsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /system/logs:
+    get:
+      tags:
+        - System Management
+      summary: Get system logs
+      description: Retrieve system logs with filtering
+      operationId: getSystemLogs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Number of logs to return
+          required: false
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 1000
+        - name: offset
+          in: query
+          description: Number of logs to skip
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: level
+          in: query
+          description: Filter by log level
+          required: false
+          schema:
+            type: string
+            enum: [debug, info, warn, error, fatal]
+        - name: service
+          in: query
+          description: Filter by service name
+          required: false
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: Search term in logs
+          required: false
+          schema:
+            type: string
+        - name: start_time
+          in: query
+          description: Start time for log search
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: end_time
+          in: query
+          description: End time for log search
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: System logs retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemLogsResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /system/maintenance:
+    post:
+      tags:
+        - System Management
+      summary: Toggle maintenance mode
+      description: Enable or disable system maintenance mode
+      operationId: toggleMaintenanceMode
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceModeRequest'
+      responses:
+        '200':
+          description: Maintenance mode updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceModeResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /system/config:
+    get:
+      tags:
+        - System Management
+      summary: Get system configuration
+      description: Retrieve system configuration settings
+      operationId: getSystemConfig
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: section
+          in: query
+          description: Configuration section
+          required: false
+          schema:
+            type: string
+            enum: [general, security, email, payment, storage, moderation]
+      responses:
+        '200':
+          description: System configuration retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemConfigResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags:
+        - System Management
+      summary: Update system configuration
+      description: Update system configuration settings
+      operationId: updateSystemConfig
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: section
+          in: query
+          description: Configuration section
+          required: true
+          schema:
+            type: string
+            enum: [general, security, email, payment, storage, moderation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSystemConfigRequest'
+      responses:
+        '200':
+          description: System configuration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateSystemConfigResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Content Management endpoints
+  /content/photos:
+    get:
+      tags:
+        - Content Management
+      summary: Get reported photos
+      description: |
+        Retrieve list of reported photos for moderation with AI-powered analysis.
+        
+        **Moderation Features:**
+        - AI-powered content analysis and scoring
+        - Human review workflow integration
+        - Bulk moderation capabilities
+        - Automated decision support
+        - Appeal process management
+        
+        **Content Analysis:**
+        - Inappropriate content detection
+        - Copyright violation detection
+        - Spam and fake content detection
+        - Quality assessment
+        - Contextual analysis
+        
+        **Rate Limit:** 25 requests per minute, 600 per hour
+      operationId: getReportedPhotos
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter by moderation status
+          required: false
+          schema:
+            type: string
+            enum: [pending, reviewed, resolved, dismissed]
+            default: pending
+        - name: limit
+          in: query
+          description: Number of photos to return
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of photos to skip
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Reported photos retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportedPhotosResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /content/photos/{photoId}/approve:
+    post:
+      tags:
+        - Content Management
+      summary: Approve photo
+      description: Approve reported photo
+      operationId: approvePhoto
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: photoId
+          in: path
+          required: true
+          description: Photo ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModeratePhotoRequest'
+      responses:
+        '200':
+          description: Photo approved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeratePhotoResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Photo not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /content/photos/{photoId}/reject:
+    post:
+      tags:
+        - Content Management
+      summary: Reject photo
+      description: Reject reported photo
+      operationId: rejectPhoto
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: photoId
+          in: path
+          required: true
+          description: Photo ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModeratePhotoRequest'
+      responses:
+        '200':
+          description: Photo rejected successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeratePhotoResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Photo not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /content/messages:
+    get:
+      tags:
+        - Content Management
+      summary: Get reported messages
+      description: Retrieve list of reported messages for moderation
+      operationId: getReportedMessages
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter by moderation status
+          required: false
+          schema:
+            type: string
+            enum: [pending, reviewed, resolved, dismissed]
+            default: pending
+        - name: limit
+          in: query
+          description: Number of messages to return
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of messages to skip
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Reported messages retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportedMessagesResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /content/messages/{messageId}/delete:
+    post:
+      tags:
+        - Content Management
+      summary: Delete message
+      description: Delete reported message
+      operationId: deleteMessage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          description: Message ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModerateMessageRequest'
+      responses:
+        '200':
+          description: Message deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModerateMessageResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Message not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Health check (public)
+  /health:
+    get:
+      tags:
+        - System Management
+      summary: Public health check
+      description: Public health check endpoint
+      operationId: publicHealthCheck
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicHealthResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token for admin authentication
+
+  schemas:
+    # Request schemas
+    AdminLoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: Admin email address
+        password:
+          type: string
+          minLength: 8
+          description: Admin password
+        remember_me:
+          type: boolean
+          default: false
+          description: Remember login session
+
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          description: Refresh token
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          description: Username
+        email:
+          type: string
+          format: email
+          description: Email address
+        first_name:
+          type: string
+          maxLength: 100
+          description: First name
+        last_name:
+          type: string
+          maxLength: 100
+          description: Last name
+        bio:
+          type: string
+          maxLength: 500
+          description: User bio
+        location:
+          type: object
+          properties:
+            latitude:
+              type: number
+              format: float
+            longitude:
+              type: number
+              format: float
+            city:
+              type: string
+            country:
+              type: string
+          description: User location
+        preferences:
+          type: object
+          properties:
+            age_range:
+              type: object
+              properties:
+                min:
+                  type: integer
+                  minimum: 18
+                  maximum: 100
+                max:
+                  type: integer
+                  minimum: 18
+                  maximum: 100
+            max_distance:
+              type: integer
+              minimum: 1
+              maximum: 500
+            show_age:
+              type: boolean
+            show_distance:
+              type: boolean
+          description: User preferences
+
+    SuspendUserRequest:
+      type: object
+      required:
+        - duration
+        - reason
+      properties:
+        duration:
+          type: integer
+          minimum: 1
+          maximum: 365
+          description: Suspension duration in days
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Suspension reason
+        notify_user:
+          type: boolean
+          default: true
+          description: Notify user about suspension
+
+    BanUserRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Ban reason
+        notify_user:
+          type: boolean
+          default: true
+          description: Notify user about ban
+
+    BulkUpdateUsersRequest:
+      type: object
+      required:
+        - user_ids
+        - updates
+      properties:
+        user_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: List of user IDs to update
+        updates:
+          type: object
+          description: Updates to apply to all users
+
+    BulkDeleteUsersRequest:
+      type: object
+      required:
+        - user_ids
+      properties:
+        user_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: List of user IDs to delete
+        hard_delete:
+          type: boolean
+          default: false
+          description: Perform hard delete
+
+    MaintenanceModeRequest:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+          description: Enable or disable maintenance mode
+        message:
+          type: string
+          maxLength: 500
+          description: Maintenance message for users
+        estimated_duration:
+          type: integer
+          minimum: 1
+          description: Estimated maintenance duration in minutes
+
+    UpdateSystemConfigRequest:
+      type: object
+      required:
+        - config
+      properties:
+        config:
+          type: object
+          description: Configuration settings
+        reason:
+          type: string
+          maxLength: 500
+          description: Reason for configuration change
+
+    ModeratePhotoRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          description: Moderation reason
+        notes:
+          type: string
+          maxLength: 1000
+          description: Additional notes
+        warn_user:
+          type: boolean
+          default: false
+          description: Warn user about violation
+        ban_user:
+          type: boolean
+          default: false
+          description: Ban user for violation
+        ban_duration:
+          type: integer
+          minimum: 1
+          maximum: 365
+          description: Ban duration in days
+
+    ModerateMessageRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          description: Moderation reason
+        notes:
+          type: string
+          maxLength: 1000
+          description: Additional notes
+        warn_user:
+          type: boolean
+          default: false
+          description: Warn user about violation
+        ban_user:
+          type: boolean
+          default: false
+          description: Ban user for violation
+        ban_duration:
+          type: integer
+          minimum: 1
+          maximum: 365
+          description: Ban duration in days
+
+    # Response schemas
+    AdminLoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT access token
+        refresh_token:
+          type: string
+          description: Refresh token
+        expires_in:
+          type: integer
+          description: Token expiration time in seconds
+        admin:
+          $ref: '#/components/schemas/AdminUser'
+
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Admin ID
+        username:
+          type: string
+          description: Admin username
+        email:
+          type: string
+          format: email
+          description: Admin email
+        role:
+          type: string
+          description: Admin role
+        permissions:
+          type: array
+          items:
+            type: string
+          description: Admin permissions
+        last_login:
+          type: string
+          format: date-time
+          description: Last login time
+        created_at:
+          type: string
+          format: date-time
+          description: Account creation time
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          description: Success message
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+        details:
+          type: object
+          description: Additional error details
+
+    UsersResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        total:
+          type: integer
+          description: Total number of users
+        page:
+          type: integer
+          description: Current page number
+        per_page:
+          type: integer
+          description: Number of users per page
+        total_pages:
+          type: integer
+          description: Total number of pages
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: User ID
+        username:
+          type: string
+          description: Username
+        email:
+          type: string
+          format: email
+          description: Email address
+        first_name:
+          type: string
+          description: First name
+        last_name:
+          type: string
+          description: Last name
+        status:
+          type: string
+          enum: [active, suspended, banned, deleted]
+          description: User status
+        created_at:
+          type: string
+          format: date-time
+          description: Account creation time
+        last_active:
+          type: string
+          format: date-time
+          description: Last activity time
+        verification_status:
+          type: string
+          enum: [none, pending, verified, rejected]
+          description: Verification status
+        subscription_status:
+          type: string
+          enum: [none, trial, active, expired, cancelled]
+          description: Subscription status
+
+    UserDetailsResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/UserDetails'
+        statistics:
+          $ref: '#/components/schemas/UserStatistics'
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Photo'
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/Match'
+        reports:
+          type: array
+          items:
+            $ref: '#/components/schemas/Report'
+
+    UserDetails:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: User ID
+        username:
+          type: string
+          description: Username
+        email:
+          type: string
+          format: email
+          description: Email address
+        first_name:
+          type: string
+          description: First name
+        last_name:
+          type: string
+          description: Last name
+        bio:
+          type: string
+          description: User bio
+        location:
+          $ref: '#/components/schemas/Location'
+        preferences:
+          $ref: '#/components/schemas/Preferences'
+        status:
+          type: string
+          enum: [active, suspended, banned, deleted]
+          description: User status
+        created_at:
+          type: string
+          format: date-time
+          description: Account creation time
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update time
+        last_active:
+          type: string
+          format: date-time
+          description: Last activity time
+        verification_status:
+          type: string
+          enum: [none, pending, verified, rejected]
+          description: Verification status
+        subscription_status:
+          type: string
+          enum: [none, trial, active, expired, cancelled]
+          description: Subscription status
+
+    UserStatistics:
+      type: object
+      properties:
+        total_matches:
+          type: integer
+          description: Total number of matches
+        total_messages_sent:
+          type: integer
+          description: Total messages sent
+        total_messages_received:
+          type: integer
+          description: Total messages received
+        total_likes_given:
+          type: integer
+          description: Total likes given
+        total_likes_received:
+          type: integer
+          description: Total likes received
+        total_profile_views:
+          type: integer
+          description: Total profile views
+        average_response_time:
+          type: number
+          description: Average response time in hours
+        match_rate:
+          type: number
+          description: Match rate percentage
+        response_rate:
+          type: number
+          description: Response rate percentage
+
+    Photo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Photo ID
+        url:
+          type: string
+          description: Photo URL
+        thumbnail_url:
+          type: string
+          description: Thumbnail URL
+        is_primary:
+          type: boolean
+          description: Whether this is the primary photo
+        created_at:
+          type: string
+          format: date-time
+          description: Upload time
+
+    Match:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Match ID
+        user_id:
+          type: string
+          format: uuid
+          description: Matched user ID
+        created_at:
+          type: string
+          format: date-time
+          description: Match creation time
+
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Report ID
+        reporter_id:
+          type: string
+          format: uuid
+          description: Reporter ID
+        reason:
+          type: string
+          description: Report reason
+        description:
+          type: string
+          description: Report description
+        status:
+          type: string
+          enum: [pending, reviewed, resolved, dismissed]
+          description: Report status
+        created_at:
+          type: string
+          format: date-time
+          description: Report creation time
+
+    Location:
+      type: object
+      properties:
+        latitude:
+          type: number
+          format: float
+          description: Latitude
+        longitude:
+          type: number
+          format: float
+          description: Longitude
+        city:
+          type: string
+          description: City
+        country:
+          type: string
+          description: Country
+
+    Preferences:
+      type: object
+      properties:
+        age_range:
+          type: object
+          properties:
+            min:
+              type: integer
+              minimum: 18
+              maximum: 100
+            max:
+              type: integer
+              minimum: 18
+              maximum: 100
+        max_distance:
+          type: integer
+          minimum: 1
+          maximum: 500
+        show_age:
+          type: boolean
+        show_distance:
+          type: boolean
+
+    UpdateUserResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Update success status
+        message:
+          type: string
+          description: Success message
+        updated_fields:
+          type: array
+          items:
+            type: string
+          description: List of updated fields
+
+    DeleteUserResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Delete success status
+        message:
+          type: string
+          description: Success message
+        deleted_data:
+          type: object
+          description: Summary of deleted data
+
+    SuspendUserResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Suspend success status
+        message:
+          type: string
+          description: Success message
+        action:
+          type: string
+          description: Action performed
+        duration:
+          type: integer
+          description: Suspension duration in days
+        reason:
+          type: string
+          description: Suspension reason
+
+    UserActivityResponse:
+      type: object
+      properties:
+        activities:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserActivity'
+        total:
+          type: integer
+          description: Total number of activities
+        page:
+          type: integer
+          description: Current page number
+        per_page:
+          type: integer
+          description: Number of activities per page
+        total_pages:
+          type: integer
+          description: Total number of pages
+
+    UserActivity:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Activity ID
+        activity_type:
+          type: string
+          enum: [login, logout, profile_update, photo_upload, message_sent, match_created]
+          description: Activity type
+        description:
+          type: string
+          description: Activity description
+        ip_address:
+          type: string
+          description: IP address
+        user_agent:
+          type: string
+          description: User agent
+        created_at:
+          type: string
+          format: date-time
+          description: Activity time
+
+    BulkOperationResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total number of operations
+        success:
+          type: integer
+          description: Number of successful operations
+        failed:
+          type: integer
+          description: Number of failed operations
+        errors:
+          type: array
+          items:
+            type: string
+          description: List of error messages
+        timestamp:
+          type: string
+          format: date-time
+          description: Operation timestamp
+
+    PlatformStatsResponse:
+      type: object
+      properties:
+        overview:
+          $ref: '#/components/schemas/PlatformOverview'
+        growth:
+          $ref: '#/components/schemas/GrowthStats'
+        engagement:
+          $ref: '#/components/schemas/EngagementStats'
+        timestamp:
+          type: string
+          format: date-time
+          description: Statistics timestamp
+
+    PlatformOverview:
+      type: object
+      properties:
+        total_users:
+          type: integer
+          description: Total number of users
+        active_users:
+          type: integer
+          description: Number of active users
+        new_users_today:
+          type: integer
+          description: New users today
+        total_matches:
+          type: integer
+          description: Total number of matches
+        new_matches_today:
+          type: integer
+          description: New matches today
+        total_messages:
+          type: integer
+          description: Total number of messages
+        new_messages_today:
+          type: integer
+          description: New messages today
+        total_revenue:
+          type: number
+          description: Total revenue
+        revenue_today:
+          type: number
+          description: Revenue today
+
+    GrowthStats:
+      type: object
+      properties:
+        user_growth_rate:
+          type: number
+          description: User growth rate percentage
+        match_growth_rate:
+          type: number
+          description: Match growth rate percentage
+        message_growth_rate:
+          type: number
+          description: Message growth rate percentage
+        revenue_growth_rate:
+          type: number
+          description: Revenue growth rate percentage
+
+    EngagementStats:
+      type: object
+      properties:
+        daily_active_users:
+          type: integer
+          description: Daily active users
+        monthly_active_users:
+          type: integer
+          description: Monthly active users
+        average_session_duration:
+          type: number
+          description: Average session duration in minutes
+        retention_rate:
+          type: number
+          description: User retention rate percentage
+
+    UserStatsResponse:
+      type: object
+      properties:
+        overview:
+          $ref: '#/components/schemas/UserStatsOverview'
+        demographics:
+          $ref: '#/components/schemas/UserDemographics'
+        activity:
+          $ref: '#/components/schemas/UserActivityStats'
+        grouped_data:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserStatsGroup'
+        timestamp:
+          type: string
+          format: date-time
+          description: Statistics timestamp
+
+    UserStatsOverview:
+      type: object
+      properties:
+        total_users:
+          type: integer
+          description: Total number of users
+        new_users:
+          type: integer
+          description: New users in period
+        active_users:
+          type: integer
+          description: Active users in period
+        verification_rate:
+          type: number
+          description: Verification rate percentage
+
+    UserDemographics:
+      type: object
+      properties:
+        by_age:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Users by age group
+        by_gender:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Users by gender
+        by_location:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Users by location
+
+    UserActivityStats:
+      type: object
+      properties:
+        login_frequency:
+          type: number
+          description: Average login frequency
+        session_duration:
+          type: number
+          description: Average session duration
+        feature_usage:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Feature usage statistics
+
+    UserStatsGroup:
+      type: object
+      properties:
+        period:
+          type: string
+          description: Time period
+        date:
+          type: string
+          description: Date
+        users:
+          $ref: '#/components/schemas/UserStatsOverview'
+          description: User statistics for period
+
+    MatchStatsResponse:
+      type: object
+      properties:
+        overview:
+          $ref: '#/components/schemas/MatchStatsOverview'
+        conversion:
+          $ref: '#/components/schemas/MatchConversionStats'
+        grouped_data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MatchStatsGroup'
+        timestamp:
+          type: string
+          format: date-time
+          description: Statistics timestamp
+
+    MatchStatsOverview:
+      type: object
+      properties:
+        total_matches:
+          type: integer
+          description: Total number of matches
+        new_matches:
+          type: integer
+          description: New matches in period
+        successful_matches:
+          type: integer
+          description: Successful matches
+        match_rate:
+          type: number
+          description: Match rate percentage
+
+    MatchConversionStats:
+      type: object
+      properties:
+        swipe_to_match_rate:
+          type: number
+          description: Swipe to match conversion rate
+        match_to_message_rate:
+          type: number
+          description: Match to message conversion rate
+        average_time_to_match:
+          type: number
+          description: Average time to match in days
+
+    MatchStatsGroup:
+      type: object
+      properties:
+        period:
+          type: string
+          description: Time period
+        date:
+          type: string
+          description: Date
+        matches:
+          $ref: '#/components/schemas/MatchStatsOverview'
+          description: Match statistics for period
+
+    MessageStatsResponse:
+      type: object
+      properties:
+        overview:
+          $ref: '#/components/schemas/MessageStatsOverview'
+        engagement:
+          $ref: '#/components/schemas/MessageEngagementStats'
+        grouped_data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageStatsGroup'
+        timestamp:
+          type: string
+          format: date-time
+          description: Statistics timestamp
+
+    MessageStatsOverview:
+      type: object
+      properties:
+        total_messages:
+          type: integer
+          description: Total number of messages
+        new_messages:
+          type: integer
+          description: New messages in period
+        active_conversations:
+          type: integer
+          description: Active conversations
+        average_messages_per_conversation:
+          type: number
+          description: Average messages per conversation
+
+    MessageEngagementStats:
+      type: object
+      properties:
+        response_rate:
+          type: number
+          description: Response rate percentage
+        average_response_time:
+          type: number
+          description: Average response time in hours
+        conversation_duration:
+          type: number
+          description: Average conversation duration in days
+
+    MessageStatsGroup:
+      type: object
+      properties:
+        period:
+          type: string
+          description: Time period
+        date:
+          type: string
+          description: Date
+        messages:
+          $ref: '#/components/schemas/MessageStatsOverview'
+          description: Message statistics for period
+
+    PaymentStatsResponse:
+      type: object
+      properties:
+        overview:
+          $ref: '#/components/schemas/PaymentStatsOverview'
+        revenue:
+          $ref: '#/components/schemas/RevenueStats'
+        subscriptions:
+          $ref: '#/components/schemas/SubscriptionStats'
+        grouped_data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentStatsGroup'
+        timestamp:
+          type: string
+          format: date-time
+          description: Statistics timestamp
+
+    PaymentStatsOverview:
+      type: object
+      properties:
+        total_payments:
+          type: integer
+          description: Total number of payments
+        new_payments:
+          type: integer
+          description: New payments in period
+        successful_payments:
+          type: integer
+          description: Successful payments
+        failed_payments:
+          type: integer
+          description: Failed payments
+        success_rate:
+          type: number
+          description: Payment success rate percentage
+
+    RevenueStats:
+      type: object
+      properties:
+        total_revenue:
+          type: number
+          description: Total revenue
+        new_revenue:
+          type: number
+          description: New revenue in period
+        average_revenue_per_user:
+          type: number
+          description: Average revenue per user
+        revenue_growth_rate:
+          type: number
+          description: Revenue growth rate percentage
+
+    SubscriptionStats:
+      type: object
+      properties:
+        total_subscriptions:
+          type: integer
+          description: Total number of subscriptions
+        active_subscriptions:
+          type: integer
+          description: Active subscriptions
+        new_subscriptions:
+          type: integer
+          description: New subscriptions in period
+        cancelled_subscriptions:
+          type: integer
+          description: Cancelled subscriptions in period
+        churn_rate:
+          type: number
+          description: Subscription churn rate percentage
+
+    PaymentStatsGroup:
+      type: object
+      properties:
+        period:
+          type: string
+          description: Time period
+        date:
+          type: string
+          description: Date
+        payments:
+          $ref: '#/components/schemas/PaymentStatsOverview'
+          description: Payment statistics for period
+
+    VerificationStatsResponse:
+      type: object
+      properties:
+        overview:
+          $ref: '#/components/schemas/VerificationStatsOverview'
+        performance:
+          $ref: '#/components/schemas/VerificationPerformanceStats'
+        grouped_data:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerificationStatsGroup'
+        timestamp:
+          type: string
+          format: date-time
+          description: Statistics timestamp
+
+    VerificationStatsOverview:
+      type: object
+      properties:
+        total_verifications:
+          type: integer
+          description: Total number of verifications
+        pending_verifications:
+          type: integer
+          description: Pending verifications
+        approved_verifications:
+          type: integer
+          description: Approved verifications
+        rejected_verifications:
+          type: integer
+          description: Rejected verifications
+        verification_rate:
+          type: number
+          description: Verification rate percentage
+        avg_processing_time:
+          type: number
+          description: Average processing time in hours
+
+    VerificationPerformanceStats:
+      type: object
+      properties:
+        approval_rate:
+          type: number
+          description: Approval rate percentage
+        rejection_rate:
+          type: number
+          description: Rejection rate percentage
+        avg_processing_time:
+          type: number
+          description: Average processing time in hours
+        processing_by_type:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ProcessingStats'
+          description: Processing statistics by type
+        rejection_reasons:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Rejection reasons count
+
+    ProcessingStats:
+      type: object
+      properties:
+        total_count:
+          type: integer
+          description: Total count
+        approved_count:
+          type: integer
+          description: Approved count
+        rejected_count:
+          type: integer
+          description: Rejected count
+        avg_process_time:
+          type: number
+          description: Average processing time in hours
+
+    VerificationStatsGroup:
+      type: object
+      properties:
+        period:
+          type: string
+          description: Time period
+        date:
+          type: string
+          description: Date
+        verifications:
+          $ref: '#/components/schemas/VerificationStatsOverview'
+          description: Verification statistics for period
+
+    DashboardDataResponse:
+      type: object
+      properties:
+        overview:
+          $ref: '#/components/schemas/DashboardOverview'
+        user_stats:
+          $ref: '#/components/schemas/DashboardUserStats'
+        analytics:
+          $ref: '#/components/schemas/DashboardAnalytics'
+        system:
+          $ref: '#/components/schemas/DashboardSystemStatus'
+        content:
+          $ref: '#/components/schemas/DashboardContentModeration'
+        alerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardAlert'
+        recent_activities:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardActivity'
+        timestamp:
+          type: string
+          format: date-time
+          description: Dashboard timestamp
+
+    DashboardOverview:
+      type: object
+      properties:
+        total_users:
+          type: integer
+          description: Total users
+        active_users:
+          type: integer
+          description: Active users
+        new_users_today:
+          type: integer
+          description: New users today
+        total_matches:
+          type: integer
+          description: Total matches
+        new_matches_today:
+          type: integer
+          description: New matches today
+        total_messages:
+          type: integer
+          description: Total messages
+        new_messages_today:
+          type: integer
+          description: New messages today
+        total_revenue:
+          type: number
+          description: Total revenue
+        revenue_today:
+          type: number
+          description: Revenue today
+        growth_rate:
+          type: number
+          description: Growth rate percentage
+        engagement_rate:
+          type: number
+          description: Engagement rate percentage
+
+    DashboardUserStats:
+      type: object
+      properties:
+        registration_trend:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendData'
+          description: User registration trend
+        active_users_trend:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendData'
+          description: Active users trend
+        user_demographics:
+          $ref: '#/components/schemas/UserDemographics'
+          description: User demographics
+
+    DashboardAnalytics:
+      type: object
+      properties:
+        match_trend:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendData'
+          description: Match trend
+        message_trend:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendData'
+          description: Message trend
+        revenue_trend:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendData'
+          description: Revenue trend
+        conversion_rates:
+          $ref: '#/components/schemas/ConversionRates'
+          description: Conversion rates
+
+    ConversionRates:
+      type: object
+      properties:
+        registration_to_match:
+          type: number
+          description: Registration to match conversion rate
+        match_to_message:
+          type: number
+          description: Match to message conversion rate
+        message_to_subscription:
+          type: number
+          description: Message to subscription conversion rate
+
+    DashboardSystemStatus:
+      type: object
+      properties:
+        overall_status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          description: Overall system status
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceStatus'
+          description: Service status
+        resource_usage:
+          $ref: '#/components/schemas/ResourceUsage'
+          description: Resource usage
+        performance_metrics:
+          $ref: '#/components/schemas/PerformanceMetrics'
+          description: Performance metrics
+
+    ServiceStatus:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Service name
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          description: Service status
+        response_time:
+          type: integer
+          description: Response time in milliseconds
+        uptime:
+          type: number
+          description: Uptime percentage
+
+    ResourceUsage:
+      type: object
+      properties:
+        cpu:
+          type: number
+          description: CPU usage percentage
+        memory:
+          type: number
+          description: Memory usage percentage
+        disk:
+          type: number
+          description: Disk usage percentage
+        network:
+          type: number
+          description: Network usage percentage
+
+    PerformanceMetrics:
+      type: object
+      properties:
+        requests_per_second:
+          type: number
+          description: Requests per second
+        average_response_time:
+          type: number
+          description: Average response time in milliseconds
+        error_rate:
+          type: number
+          description: Error rate percentage
+        active_connections:
+          type: integer
+          description: Active connections
+
+    DashboardContentModeration:
+      type: object
+      properties:
+        pending_reports:
+          type: integer
+          description: Pending reports
+        resolved_today:
+          type: integer
+          description: Resolved today
+        total_reports:
+          type: integer
+          description: Total reports
+        report_types:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Report types count
+        recent_moderation:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModerationAction'
+          description: Recent moderation actions
+
+    ModerationAction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Action ID
+        content_type:
+          type: string
+          enum: [photo, message]
+          description: Content type
+        action:
+          type: string
+          enum: [approved, rejected, deleted]
+          description: Moderation action
+        reason:
+          type: string
+          description: Moderation reason
+        timestamp:
+          type: string
+          format: date-time
+          description: Action timestamp
+        admin_id:
+          type: string
+          format: uuid
+          description: Admin ID
+
+    DashboardAlert:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Alert ID
+        level:
+          type: string
+          enum: [info, warning, error, critical]
+          description: Alert level
+        title:
+          type: string
+          description: Alert title
+        message:
+          type: string
+          description: Alert message
+        service:
+          type: string
+          description: Service name
+        timestamp:
+          type: string
+          format: date-time
+          description: Alert timestamp
+        acknowledged:
+          type: boolean
+          description: Alert acknowledged status
+        resolved:
+          type: boolean
+          description: Alert resolved status
+
+    DashboardActivity:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Activity ID
+        admin_id:
+          type: string
+          format: uuid
+          description: Admin ID
+        action:
+          type: string
+          description: Action performed
+        target:
+          type: string
+          description: Action target
+        details:
+          type: string
+          description: Action details
+        timestamp:
+          type: string
+          format: date-time
+          description: Activity timestamp
+        ip_address:
+          type: string
+          description: IP address
+
+    TrendData:
+      type: object
+      properties:
+        date:
+          type: string
+          description: Date
+        value:
+          type: number
+          description: Trend value
+
+    SystemHealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          description: Overall system status
+        timestamp:
+          type: string
+          format: date-time
+          description: Health check timestamp
+        uptime:
+          type: string
+          description: System uptime
+        version:
+          type: string
+          description: System version
+        environment:
+          type: string
+          description: Environment
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceStatus'
+          description: Service status
+        resources:
+          $ref: '#/components/schemas/ResourceUsage'
+          description: Resource usage
+        metrics:
+          $ref: '#/components/schemas/PerformanceMetrics'
+          description: Performance metrics
+        alerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/SystemAlert'
+          description: System alerts
+
+    SystemAlert:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Alert ID
+        level:
+          type: string
+          enum: [info, warning, error, critical]
+          description: Alert level
+        service:
+          type: string
+          description: Service name
+        message:
+          type: string
+          description: Alert message
+        timestamp:
+          type: string
+          format: date-time
+          description: Alert timestamp
+        resolved:
+          type: boolean
+          description: Alert resolved status
+
+    SystemMetricsResponse:
+      type: object
+      properties:
+        cpu_usage:
+          type: number
+          description: CPU usage percentage
+        memory_usage:
+          type: number
+          description: Memory usage percentage
+        disk_usage:
+          type: number
+          description: Disk usage percentage
+        network_usage:
+          type: number
+          description: Network usage percentage
+        requests_per_second:
+          type: number
+          description: Requests per second
+        average_response_time:
+          type: number
+          description: Average response time in milliseconds
+        error_rate:
+          type: number
+          description: Error rate percentage
+        active_connections:
+          type: integer
+          description: Active connections
+        queue_size:
+          type: integer
+          description: Queue size
+        timestamp:
+          type: string
+          format: date-time
+          description: Metrics timestamp
+
+    SystemLogsResponse:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/SystemLog'
+          description: System logs
+        total:
+          type: integer
+          description: Total number of logs
+        page:
+          type: integer
+          description: Current page number
+        per_page:
+          type: integer
+          description: Number of logs per page
+        total_pages:
+          type: integer
+          description: Total number of pages
+        timestamp:
+          type: string
+          format: date-time
+          description: Response timestamp
+
+    SystemLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Log ID
+        timestamp:
+          type: string
+          format: date-time
+          description: Log timestamp
+        level:
+          type: string
+          enum: [debug, info, warn, error, fatal]
+          description: Log level
+        service:
+          type: string
+          description: Service name
+        message:
+          type: string
+          description: Log message
+        context:
+          type: object
+          description: Log context
+        trace_id:
+          type: string
+          description: Trace ID
+        user_id:
+          type: string
+          format: uuid
+          description: User ID
+        request_id:
+          type: string
+          description: Request ID
+
+    MaintenanceModeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Operation success status
+        message:
+          type: string
+          description: Success message
+        maintenance_mode:
+          type: boolean
+          description: Current maintenance mode status
+        timestamp:
+          type: string
+          format: date-time
+          description: Operation timestamp
+
+    SystemConfigResponse:
+      type: object
+      properties:
+        section:
+          type: string
+          description: Configuration section
+        config:
+          type: object
+          description: Configuration settings
+        last_updated:
+          type: string
+          format: date-time
+          description: Last update time
+        updated_by:
+          type: string
+          format: uuid
+          description: Updated by admin ID
+        timestamp:
+          type: string
+          format: date-time
+          description: Response timestamp
+
+    UpdateSystemConfigResponse:
+      type: object
+      properties:
+        section:
+          type: string
+          description: Configuration section
+        status:
+          type: string
+          description: Update status
+        message:
+          type: string
+          description: Success message
+        updated_by:
+          type: string
+          format: uuid
+          description: Updated by admin ID
+        timestamp:
+          type: string
+          format: date-time
+          description: Update timestamp
+
+    ReportedPhotosResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportedContentItem'
+          description: Reported photos
+        total:
+          type: integer
+          description: Total number of reported photos
+        page:
+          type: integer
+          description: Current page number
+        per_page:
+          type: integer
+          description: Number of photos per page
+        total_pages:
+          type: integer
+          description: Total number of pages
+        timestamp:
+          type: string
+          format: date-time
+          description: Response timestamp
+
+    ReportedContentItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Content ID
+        content_type:
+          type: string
+          enum: [photo, message]
+          description: Content type
+        content_id:
+          type: string
+          format: uuid
+          description: Content ID
+        status:
+          type: string
+          enum: [pending, reviewed, resolved, dismissed]
+          description: Content status
+        report_count:
+          type: integer
+          description: Number of reports
+        reports:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportSummary'
+          description: Report details
+        content:
+          $ref: '#/components/schemas/ContentDetails'
+          description: Content details
+        reporter:
+          $ref: '#/components/schemas/UserSummary'
+          description: Reporter details
+        reported_user:
+          $ref: '#/components/schemas/UserSummary'
+          description: Reported user details
+        created_at:
+          type: string
+          format: date-time
+          description: Report creation time
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update time
+        reviewed_by:
+          type: string
+          format: uuid
+          description: Reviewed by admin ID
+        reviewed_at:
+          type: string
+          format: date-time
+          description: Review time
+        resolution:
+          type: string
+          description: Resolution details
+
+    ReportSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Report ID
+        reason:
+          type: string
+          description: Report reason
+        message:
+          type: string
+          description: Report message
+        status:
+          type: string
+          enum: [pending, reviewed, resolved, dismissed]
+          description: Report status
+        created_at:
+          type: string
+          format: date-time
+          description: Report creation time
+
+    ContentDetails:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Content URL
+        thumbnail:
+          type: string
+          description: Thumbnail URL
+        message:
+          type: string
+          description: Message content
+        metadata:
+          type: object
+          description: Content metadata
+
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: User ID
+        username:
+          type: string
+          description: Username
+        name:
+          type: string
+          description: User name
+        avatar:
+          type: string
+          description: Avatar URL
+
+    ModeratePhotoResponse:
+      type: object
+      properties:
+        content_id:
+          type: string
+          format: uuid
+          description: Content ID
+        content_type:
+          type: string
+          enum: [photo, message]
+          description: Content type
+        action:
+          type: string
+          enum: [approved, rejected, deleted]
+          description: Moderation action
+        status:
+          type: string
+          description: Action status
+        message:
+          type: string
+          description: Success message
+        user_action:
+          $ref: '#/components/schemas/UserAction'
+          description: User action taken
+        timestamp:
+          type: string
+          format: date-time
+          description: Action timestamp
+
+    UserAction:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: User ID
+        action:
+          type: string
+          enum: [warned, banned, suspended]
+          description: Action taken
+        duration:
+          type: integer
+          description: Action duration in days
+        reason:
+          type: string
+          description: Action reason
+        timestamp:
+          type: string
+          format: date-time
+          description: Action timestamp
+
+    ReportedMessagesResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportedContentItem'
+          description: Reported messages
+        total:
+          type: integer
+          description: Total number of reported messages
+        page:
+          type: integer
+          description: Current page number
+        per_page:
+          type: integer
+          description: Number of messages per page
+        total_pages:
+          type: integer
+          description: Total number of pages
+        timestamp:
+          type: string
+          format: date-time
+          description: Response timestamp
+
+    ModerateMessageResponse:
+      type: object
+      properties:
+        content_id:
+          type: string
+          format: uuid
+          description: Content ID
+        content_type:
+          type: string
+          enum: [photo, message]
+          description: Content type
+        action:
+          type: string
+          enum: [approved, rejected, deleted]
+          description: Moderation action
+        status:
+          type: string
+          description: Action status
+        message:
+          type: string
+          description: Success message
+        user_action:
+          $ref: '#/components/schemas/UserAction'
+          description: User action taken
+        timestamp:
+          type: string
+          format: date-time
+          description: Action timestamp
+
+    PublicHealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          description: System health status
+        timestamp:
+          type: string
+          format: date-time
+          description: Health check timestamp
+        version:
+          type: string
+          description: System version
+        environment:
+          type: string
+          description: Environment
+
+tags:
+  - name: Authentication
+    description: Admin authentication endpoints
+  - name: User Management
+    description: User management endpoints
+  - name: Analytics
+    description: Analytics and statistics endpoints
+  - name: System Management
+    description: System management endpoints
+  - name: Content Management
+    description: Content moderation endpoints

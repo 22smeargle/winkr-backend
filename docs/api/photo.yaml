@@ -1,0 +1,764 @@
+openapi: 3.0.3
+info:
+  title: Winkr Photo API
+  description: |
+    API endpoints for photo management including upload, download, and manipulation in the Winkr dating application.
+    
+    This API provides comprehensive photo management functionality including:
+    - Photo upload with automatic processing and optimization
+    - Presigned URL generation for direct S3/MinIO uploads
+    - Photo deletion with primary photo protection
+    - Primary photo management
+    - Download URL generation with access control
+    - Photo view tracking for analytics and ephemeral photos
+    - Support for verification photos with watermarks
+    - Ephemeral photos with view limits and expiration
+    
+    ## Security Features
+    - JWT-based authentication for all endpoints
+    - Presigned URLs with temporary access (15-30 minutes)
+    - Image content validation and malware scanning
+    - Automatic image processing and optimization
+    - Watermarking for verification photos
+    - Access control based on user relationships
+    - Rate limiting to prevent abuse
+    - Audit logging for all photo operations
+    
+    ## Rate Limiting
+    - Photo upload: 10 requests per minute per authenticated user
+    - Photo deletion: 20 requests per minute per authenticated user
+    - Primary photo changes: 5 requests per minute per authenticated user
+    - Upload URL generation: 30 requests per minute per authenticated user
+    - Download URL generation: 50 requests per minute per authenticated user
+    - Photo view tracking: 100 requests per minute per authenticated user
+  version: 1.0.0
+  contact:
+    name: WinKr API Team
+    email: api@winkr.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.winkr.com/v1
+    description: Production server
+  - url: https://staging-api.winkr.com/v1
+    description: Staging server
+  - url: http://localhost:8080/v1
+    description: Development server
+
+paths:
+  /me/photos:
+    post:
+      tags:
+        - Photos
+      summary: Upload a photo
+      description: |
+        Upload a new photo to the user's profile. The photo will be processed, validated, and stored in S3/MinIO.
+        The first photo uploaded automatically becomes the primary photo. Images are resized and optimized automatically.
+        
+        **Upload Flow:**
+        1. Validate image format and size (max 10MB, JPEG/PNG/WebP only)
+        2. Scan for malware and inappropriate content
+        3. Process image (resize, optimize, generate thumbnail, watermark if verification)
+        4. Upload to storage service with encryption
+        5. Save metadata to database with access controls
+        6. Trigger content moderation if required
+        
+        ## Security Features
+        - Image format validation (JPEG, PNG, WebP only)
+        - File size limits (max 10MB)
+        - Malware scanning and content validation
+        - Automatic EXIF data removal for privacy
+        - Watermarking for verification photos
+        - Rate limiting: 10 requests per minute per authenticated user
+        - Content moderation integration
+        - Storage encryption at rest
+      operationId: uploadPhoto
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhotoUploadRequest'
+            examples:
+              regularPhoto:
+                summary: Regular profile photo
+                value:
+                  image_data: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k="
+                  content_type: "image/jpeg"
+              verificationPhoto:
+                summary: Verification photo with watermark
+                value:
+                  image_data: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k="
+                  content_type: "image/jpeg"
+                  is_verification: true
+              ephemeralPhoto:
+                summary: Ephemeral photo with view limit
+                value:
+                  image_data: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k="
+                  content_type: "image/jpeg"
+                  is_ephemeral: true
+                  max_view_count: 5
+      responses:
+        '201':
+          description: Photo uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhotoResponse'
+              examples:
+                successfulUpload:
+                  summary: Photo uploaded successfully
+                  value:
+                    status: "success"
+                    data:
+                      id: "550e8400-e29b-41d4-a716-446655440000"
+                      user_id: "550e8400-e29b-41d4-a716-446655440001"
+                      storage_key: "photos/550e8400-e29b-41d4-a716-446655440000/original.jpg"
+                      thumbnail_key: "photos/550e8400-e29b-41d4-a716-446655440000/thumb.jpg"
+                      content_type: "image/jpeg"
+                      width: 800
+                      height: 600
+                      file_size: 102400
+                      is_primary: true
+                      is_verification: false
+                      is_ephemeral: false
+                      view_count: 0
+                      max_view_count: null
+                      expires_at: null
+                      created_at: "2025-01-01T00:00:00Z"
+                      updated_at: "2025-01-01T00:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                status: "error"
+                error: "File size exceeds maximum allowed size of 10MB"
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                status: "error"
+                error: "Content type application/pdf is not allowed"
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /me/photos/{photoId}:
+    delete:
+      tags:
+        - Photos
+      summary: Delete a photo
+      description: |
+        Delete a photo from the user's profile. This removes the photo from storage and database.
+        The primary photo cannot be deleted if it's the only photo.
+        
+        **Deletion Process:**
+        1. Validate user ownership of photo
+        2. Check if photo is primary and if it's the only photo
+        3. Remove photo from storage service
+        4. Delete photo metadata from database
+        5. Update primary photo if necessary
+        6. Log deletion for audit purposes
+        
+        ## Security Features
+        - Photo ownership verification
+        - Primary photo protection rules
+        - Secure storage deletion
+        - Rate limiting: 20 requests per minute per authenticated user
+        - Audit logging for compliance
+        - Cascade deletion for related data
+      operationId: deletePhoto
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: photoId
+          in: path
+          required: true
+          description: ID of the photo to delete
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Photo deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              example:
+                status: "success"
+                message: "Photo deleted successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Cannot delete primary photo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                status: "error"
+                error: "Cannot delete primary photo when it's the only photo"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /me/photos/{photoId}/set-primary:
+    put:
+      tags:
+        - Photos
+      summary: Set photo as primary
+      description: |
+        Set a specific photo as the user's primary profile photo. Only one photo can be primary at a time.
+        The previous primary photo will be unset.
+        
+        **Primary Photo Process:**
+        1. Validate user ownership of photo
+        2. Check photo verification status
+        3. Unset current primary photo
+        4. Set new photo as primary
+        5. Update photo ordering
+        6. Trigger profile reindexing for search
+        
+        ## Security Features
+        - Photo ownership verification
+        - Verification status checking
+        - Rate limiting: 5 requests per minute per authenticated user
+        - Audit logging for primary photo changes
+        - Profile consistency validation
+        - Search index updates
+      operationId: setPrimaryPhoto
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: photoId
+          in: path
+          required: true
+          description: ID of the photo to set as primary
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Photo set as primary successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              example:
+                status: "success"
+                message: "Photo set as primary successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /media/request-upload:
+    get:
+      tags:
+        - Photos
+      summary: Get upload URL
+      description: |
+        Generate a presigned URL for direct upload to S3/MinIO. This allows clients to upload
+        directly to storage without going through the API server, reducing bandwidth and improving performance.
+        
+        **Upload Process:**
+        1. Request an upload URL with the desired content type
+        2. Upload the file directly to the returned URL using PUT request
+        3. Notify the API when upload is complete (optional)
+      operationId: getUploadURL
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: content_type
+          in: query
+          required: true
+          description: MIME type of the file to upload
+          schema:
+            type: string
+            enum: ["image/jpeg", "image/png", "image/webp"]
+          example: "image/jpeg"
+      responses:
+        '200':
+          description: Upload URL generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadURLResponse'
+              examples:
+                successfulURL:
+                  summary: Upload URL generated
+                  value:
+                    status: "success"
+                    data:
+                      upload_url: "https://s3.amazonaws.com/bucket/photos/550e8400-e29b-41d4-a716-446655440000?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20250101%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20250101T000000Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host&X-Amz-Signature=signature"
+                      expires_at: "2025-01-01T00:15:00Z"
+                      max_file_size: 10485760
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /media/{mediaId}/url:
+    get:
+      tags:
+        - Photos
+      summary: Get download URL
+      description: |
+        Generate a presigned URL for downloading a photo. URLs are temporary and expire after a set time.
+        This allows controlled access to photos while maintaining security.
+        
+        **Download Process:**
+        1. Validate user access rights to photo
+        2. Check photo privacy settings and user relationships
+        3. Generate temporary presigned URL
+        4. Log download for analytics
+        5. Apply bandwidth restrictions if needed
+        
+        ## Security Features
+        - Access control based on user relationships
+        - Privacy setting enforcement
+        - Temporary presigned URLs (30-minute expiry)
+        - Rate limiting: 50 requests per minute per authenticated user
+        - Download tracking and analytics
+        - Bandwidth management
+        - Anti-hotlinking protection
+      operationId: getDownloadURL
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          description: ID of the media to download
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Download URL generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadURLResponse'
+              examples:
+                successfulURL:
+                  summary: Download URL generated
+                  value:
+                    status: "success"
+                    data:
+                      download_url: "https://s3.amazonaws.com/bucket/photos/550e8400-e29b-41d4-a716-446655440000?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20250101%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20250101T000000Z&X-Amz-Expires=1800&X-Amz-SignedHeaders=host&X-Amz-Signature=signature"
+                      expires_at: "2025-01-01T00:30:00Z"
+                      content_type: "image/jpeg"
+                      file_size: 102400
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Access denied to photo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                status: "error"
+                error: "Access denied to this photo"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /media/{mediaId}/view:
+    post:
+      tags:
+        - Photos
+      summary: Mark photo as viewed
+      description: |
+        Mark a photo as viewed. This is used for analytics and for ephemeral photos
+        that have a limited number of views. When the view limit is reached, the photo
+        is automatically deleted.
+        
+        **View Tracking Process:**
+        1. Validate user access to photo
+        2. Check if photo is ephemeral and has remaining views
+        3. Increment view counter
+        4. Check if view limit is reached
+        5. Auto-delete photo if limit reached
+        6. Log view for analytics
+        
+        ## Security Features
+        - Access validation before view counting
+        - Ephemeral photo view limit enforcement
+        - Automatic deletion when limits reached
+        - Rate limiting: 100 requests per minute per authenticated user
+        - View analytics and tracking
+        - Duplicate view prevention
+        - Privacy protection for sensitive photos
+      operationId: markPhotoViewed
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          description: ID of the media to mark as viewed
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Photo marked as viewed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhotoViewResponse'
+              examples:
+                successfulView:
+                  summary: Photo marked as viewed
+                  value:
+                    status: "success"
+                    data:
+                      view_count: 3
+                      max_view_count: 5
+                      remaining_views: 2
+                      expires_at: "2025-01-01T01:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          description: Photo has expired or reached view limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                status: "error"
+                error: "Photo has expired or reached maximum view count"
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token required for authentication
+
+  schemas:
+    PhotoUploadRequest:
+      type: object
+      required:
+        - image_data
+        - content_type
+      properties:
+        image_data:
+          type: string
+          description: Base64 encoded image data with data URL prefix
+          example: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k="
+        content_type:
+          type: string
+          enum: ["image/jpeg", "image/png", "image/webp"]
+          description: MIME type of the image
+          example: "image/jpeg"
+        is_verification:
+          type: boolean
+          description: Whether this is a verification photo (will be watermarked)
+          default: false
+          example: false
+        is_ephemeral:
+          type: boolean
+          description: Whether this is an ephemeral photo (expires after view limit)
+          default: false
+          example: false
+        max_view_count:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: Maximum number of views for ephemeral photos
+          example: 5
+
+    PhotoResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        data:
+          $ref: '#/components/schemas/Photo'
+
+    Photo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the photo
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        user_id:
+          type: string
+          format: uuid
+          description: ID of the user who owns the photo
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        storage_key:
+          type: string
+          description: Storage key for the original image
+          example: "photos/550e8400-e29b-41d4-a716-446655440000/original.jpg"
+        thumbnail_key:
+          type: string
+          description: Storage key for the thumbnail image
+          example: "photos/550e8400-e29b-41d4-a716-446655440000/thumb.jpg"
+        content_type:
+          type: string
+          description: MIME type of the image
+          example: "image/jpeg"
+        width:
+          type: integer
+          description: Width of the image in pixels
+          example: 800
+        height:
+          type: integer
+          description: Height of the image in pixels
+          example: 600
+        file_size:
+          type: integer
+          format: int64
+          description: Size of the image in bytes
+          example: 102400
+        is_primary:
+          type: boolean
+          description: Whether this is the user's primary photo
+          example: true
+        is_verification:
+          type: boolean
+          description: Whether this is a verification photo
+          example: false
+        is_ephemeral:
+          type: boolean
+          description: Whether this is an ephemeral photo
+          example: false
+        view_count:
+          type: integer
+          description: Number of times the photo has been viewed
+          example: 0
+        max_view_count:
+          type: integer
+          nullable: true
+          description: Maximum number of views allowed for ephemeral photos
+          example: null
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the photo expires (for ephemeral photos)
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          description: When the photo was created
+          example: "2025-01-01T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: When the photo was last updated
+          example: "2025-01-01T00:00:00Z"
+
+    UploadURLResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        data:
+          type: object
+          properties:
+            upload_url:
+              type: string
+              description: Presigned URL for uploading the file
+              example: "https://s3.amazonaws.com/bucket/photos/550e8400-e29b-41d4-a716-446655440000?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20250101%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20250101T000000Z&X-Amz-Expires=900&X-Amz-SignedHeaders=host&X-Amz-Signature=signature"
+            expires_at:
+              type: string
+              format: date-time
+              description: When the upload URL expires
+              example: "2025-01-01T00:15:00Z"
+            max_file_size:
+              type: integer
+              format: int64
+              description: Maximum file size allowed for upload
+              example: 10485760
+
+    DownloadURLResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        data:
+          type: object
+          properties:
+            download_url:
+              type: string
+              description: Presigned URL for downloading the file
+              example: "https://s3.amazonaws.com/bucket/photos/550e8400-e29b-41d4-a716-446655440000?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20250101%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20250101T000000Z&X-Amz-Expires=1800&X-Amz-SignedHeaders=host&X-Amz-Signature=signature"
+            expires_at:
+              type: string
+              format: date-time
+              description: When the download URL expires
+              example: "2025-01-01T00:30:00Z"
+            content_type:
+              type: string
+              description: MIME type of the file
+              example: "image/jpeg"
+            file_size:
+              type: integer
+              format: int64
+              description: Size of the file in bytes
+              example: 102400
+
+    PhotoViewResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        data:
+          type: object
+          properties:
+            view_count:
+              type: integer
+              description: Current number of views
+              example: 3
+            max_view_count:
+              type: integer
+              nullable: true
+              description: Maximum number of views allowed
+              example: 5
+            remaining_views:
+              type: integer
+              nullable: true
+              description: Number of views remaining
+              example: 2
+            expires_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: When the photo will expire
+              example: "2025-01-01T01:00:00Z"
+
+    SuccessResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        message:
+          type: string
+          example: "Operation completed successfully"
+
+    Error:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "error"
+        error:
+          type: string
+          description: Error message describing what went wrong
+          example: "Invalid request format"
+
+  responses:
+    BadRequest:
+      description: Bad request - Invalid input parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            status: "error"
+            error: "Invalid request format"
+
+    Unauthorized:
+      description: Unauthorized - Invalid or missing authentication token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            status: "error"
+            error: "Invalid or missing authentication token"
+
+    NotFound:
+      description: Not found - Resource does not exist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            status: "error"
+            error: "Photo not found"
+
+    TooManyRequests:
+      description: Too many requests - Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            status: "error"
+            error: "Rate limit exceeded. Please try again later."
+
+    InternalServerError:
+      description: Internal server error - Something went wrong on the server
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            status: "error"
+            error: "Internal server error"
+
+tags:
+  - name: Photos
+    description: Photo management operations
